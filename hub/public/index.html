@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Streamhub - HTV</title>
+    <!-- Google Fonts: Outfit for modern, premium look -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <!-- Font Awesome for sleek icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+
+    <!-- Dynamic Netflix-Style Movie Grid -->
+    <div id="grid-container" class="grid-container"></div>
+    <!-- Dynamic Movie Details Backdrop -->
+    <div id="backdrop" class="backdrop"></div>
+    <div class="vignette"></div>
+
+    <!-- JELLYFIN LOGIN VIEW -->
+    <section id="login-view" class="view login-view active">
+        <div class="login-box">
+            <img src="/HTV.png" alt="H-TV Logo" class="login-logo">
+            <h2>Streamhub</h2>
+            <p>Access your streaming proxy.</p>
+
+            <form id="login-form">
+                <div class="input-group">
+                    <i class="fa-solid fa-user"></i>
+                    <input type="text" id="jellyfin-username" placeholder="Jellyfin Username" required
+                        autocomplete="username">
+                </div>
+                <div class="input-group">
+                    <i class="fa-solid fa-lock"></i>
+                    <input type="password" id="jellyfin-password" placeholder="Jellyfin Password" required
+                        autocomplete="current-password">
+                </div>
+                <button type="submit" class="btn-primary" id="btn-login">
+                    Sign In <i class="fa-solid fa-arrow-right"></i>
+                </button>
+                <div id="login-error" class="login-error hidden">Invalid credentials. Please try again.</div>
+            </form>
+        </div>
+    </section>
+
+    <!-- MAIN LANDING VIEW (Google Style Search) -->
+    <main id="search-view" class="view hidden">
+        <div class="brand-header">
+            <img src="/HTV.png" alt="H-TV Logo" class="brand-logo">
+            <h1 class="brand-title">Streamhub</h1>
+        </div>
+
+        <div class="search-container">
+            <div class="search-box">
+                <i class="fa-solid fa-search search-icon"></i>
+                <input type="text" id="movie-search" placeholder="Search for a movie..." autocomplete="off">
+                <i class="fa-solid fa-spinner fa-spin loader-icon hidden" id="search-spinner"></i>
+            </div>
+
+            <!-- TMDB Autocomplete Dropdown -->
+            <div id="autocomplete-results" class="autocomplete-dropdown hidden"></div>
+
+            <!-- Trending Pills -->
+            <div id="trending-pills" class="trending-pills">
+                <!-- Injected via JS -->
+            </div>
+        </div>
+        <button id="btn-logout" class="icon-btn floating-logout" title="Sign Out">
+            Sign Out <i class="fa-solid fa-right-from-bracket"></i>
+        </button>
+    </main>
+
+    <!-- MOVIE DETAILS & TORRENT SOURCES VIEW -->
+    <section id="movie-details-view" class="view hidden">
+        <button id="btn-back" class="icon-btn"><i class="fa-solid fa-arrow-left"></i> Back</button>
+
+        <div class="content-wrapper">
+            <div class="movie-poster">
+                <img id="detail-poster" src="" alt="Movie Poster">
+            </div>
+            <div class="movie-info">
+                <h2 id="detail-title">Loading...</h2>
+                <div class="movie-meta">
+                    <span id="detail-year" class="tag"></span>
+                    <span id="detail-rating" class="tag bg-gold"><i class="fa-solid fa-star"></i> </span>
+                </div>
+                <p id="detail-overview" class="overview"></p>
+
+                <div class="sources-section">
+                    <h3>Select a Stream</h3>
+                    <div id="sources-loader" class="sources-loader">
+                        <i class="fa-solid fa-satellite-dish fa-beat"></i> Searching...
+                    </div>
+                    <!-- Prowlarr Results grid injected here -->
+                    <div id="sources-grid" class="sources-grid hidden"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- VIDEO PLAYER VIEW -->
+    <section id="player-view" class="view hidden">
+        <button id="btn-close-player" class="icon-btn floating-close"><i class="fa-solid fa-xmark"></i></button>
+        <div class="player-container">
+            <video id="video-element" controls controlslist="nodownload">
+                Your browser does not support the video tag.
+            </video>
+            <div class="player-overlay" id="player-overlay">
+                <div class="buffer-spinner">
+                    <img src="/favicon.png" alt="Loading" class="loader-logo fa-spin"
+                        style="width: 80px; height: 80px; margin-bottom: 1rem; border-radius: 20%;">
+                    <p>Buffering...</p>
+                </div>
+            </div>
+            <!-- Custom Skip Controls -->
+            <div class="custom-controls" id="custom-controls">
+                <button class="skip-btn" id="btn-skip-back"><i class="fa-solid fa-backward-step"></i> -10s</button>
+                <button class="skip-btn" id="btn-skip-forward">+10s <i class="fa-solid fa-forward-step"></i></button>
+            </div>
+        </div>
+    </section>
+
+    <script src="/app.js"></script>
+</body>
+
+</html>

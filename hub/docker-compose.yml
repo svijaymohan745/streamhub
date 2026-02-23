@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  streamhub:
+    build: .
+    container_name: streamhub
+    ports:
+      - "3000:3000"
+    environment:
+      - TMDB_API_KEY=${TMDB_API_KEY}
+      - PROWLARR_URL=${PROWLARR_URL}
+      - PROWLARR_API_KEY=${PROWLARR_API_KEY}
+      - STREAMER_URL=${STREAMER_URL}
+    restart: unless-stopped
