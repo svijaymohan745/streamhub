@@ -374,29 +374,20 @@ function startStream(magnetUri, pushHistory = true) {
             }
             const finalMagnet = magnetData.magnetUrl;
 
-            // Fetch Streamer IP
-            fetch('/api/stream-url')
-                .then(res => res.json())
-                .then(data => {
-                    const streamerNodeIP = data.url; // e.g. http://192.168.1.100:6987
-                    video.src = `${streamerNodeIP}/stream?magnet=${encodeURIComponent(finalMagnet)}`;
-                    video.play().catch(e => console.error("Autoplay prevented:", e));
+            // Stream via the Hub's secure Proxy endpoint to avoid HTTPS Mixed-Content blocking
+            video.src = `/api/stream?magnet=${encodeURIComponent(finalMagnet)}`;
+            video.play().catch(e => console.error("Autoplay prevented:", e));
 
-                    video.onplaying = () => {
-                        overlay.style.opacity = '0';
-                        setTimeout(() => overlay.style.display = 'none', 500);
-                    };
+            video.onplaying = () => {
+                overlay.style.opacity = '0';
+                setTimeout(() => overlay.style.display = 'none', 500);
+            };
 
-                    video.onwaiting = () => {
-                        overlay.style.display = 'flex';
-                        overlay.style.opacity = '1';
-                        overlay.querySelector('p').innerText = "Buffering from peers...";
-                    };
-                })
-                .catch(e => {
-                    alert('Could not determine Machine B Streamer IP.');
-                    closePlayer();
-                });
+            video.onwaiting = () => {
+                overlay.style.display = 'flex';
+                overlay.style.opacity = '1';
+                overlay.querySelector('p').innerText = "Buffering from peers...";
+            };
         })
         .catch(e => {
             alert('Magnet resolution failed.');

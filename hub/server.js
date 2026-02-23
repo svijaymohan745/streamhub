@@ -2,6 +2,7 @@ const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
 const path = require('path');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 require('dotenv').config();
 
 const app = express();
@@ -177,10 +178,23 @@ app.get('/api/grid', async (req, res) => {
     }
 });
 
-// --- API: Provide the Streamer Node URL to the Frontend ---
+// --- API: Provide the Streamer Node URL to the Frontend (Deprecated, now using proxy) ---
 app.get('/api/stream-url', (req, res) => {
     res.json({ url: STREAMER_URL });
 });
+
+// --- API: Proxy Video Stream to bypass HTTPS Mixed Content blocking ---
+app.use('/api/stream', createProxyMiddleware({
+    target: STREAMER_URL,
+    changeOrigin: true,
+    pathRewrite: {
+        '^/api/stream': '/stream', // rewrite /api/stream to /stream on target
+    },
+    onProxyRes: function (proxyRes, req, res) {
+        // Ensure CORS headers are passed downstream
+        proxyRes.headers['Access-Control-Allow-Origin'] = '*';
+    }
+}));
 
 // --- API: Securely Convert Local Prowlarr .torrent to Magnet (Bypasses VPN blocks) ---
 app.get('/api/get-magnet', async (req, res) => {
