@@ -184,15 +184,18 @@ app.get('/api/stream-url', (req, res) => {
 });
 
 // --- API: Proxy Video Stream to bypass HTTPS Mixed Content blocking ---
-app.use(createProxyMiddleware('/api/stream', {
+app.use(createProxyMiddleware({
     target: STREAMER_URL,
     changeOrigin: true,
+    pathFilter: '/api/stream',
     pathRewrite: {
         '^/api/stream': '/stream', // rewrite /api/stream to /stream on target
     },
-    onProxyRes: function (proxyRes, req, res) {
-        // Ensure CORS headers are passed downstream
-        proxyRes.headers['Access-Control-Allow-Origin'] = '*';
+    on: {
+        proxyRes: function (proxyRes, req, res) {
+            // Ensure CORS headers are passed downstream
+            proxyRes.headers['Access-Control-Allow-Origin'] = '*';
+        }
     }
 }));
 
