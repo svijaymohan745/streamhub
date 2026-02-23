@@ -306,10 +306,6 @@ body {
     color: var(--text-secondary);
 }
 
-.fa-spin {
-    animation: fa-spin 1s infinite linear;
-}
-
 /* Autocomplete Results */
 .autocomplete-dropdown {
     position: absolute;
@@ -480,6 +476,7 @@ body {
     border: 1px solid var(--glass-border);
     border-radius: 8px;
     padding: 1rem;
+    margin: 3px;
     cursor: pointer;
     transition: all 0.2s;
     display: flex;
