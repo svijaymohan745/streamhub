@@ -353,7 +353,7 @@ async function loadMovieDetails(id, mediaType = 'movie', pushHistory = true) {
                     jellyfinBtn.classList.remove('hidden');
                 } else if (jellyseerrConfig && jellyseerrConfig.configured && requestBtn) {
                     // Show Jellyseerr Request Button if missing from Jellyfin
-                    requestBtn.style.background = '#667eea';
+                    requestBtn.style.background = 'var(--accent)';
                     requestBtn.style.pointerEvents = 'auto';
                     requestBtn.innerHTML = `<i class="fa-solid fa-cloud-arrow-up" style="margin-right: 12px; font-size: 1.2rem;"></i> <span id="btn-request-text">${mediaType === 'movie' ? 'Request Movie' : 'Request Show'}</span>`;
                     requestBtn.classList.remove('hidden');
@@ -461,7 +461,7 @@ async function fetchSources(title, year) {
         loader.classList.add('hidden');
 
         if (sources.length === 0) {
-            grid.innerHTML = '<p style="grid-column: 1/-1;">No streaming sources found on Prowlarr. Try a different release.</p>';
+            grid.innerHTML = '<p style="grid-column: 1/-1;">No streaming sources found. Try a different release.</p>';
             grid.classList.remove('hidden');
             return;
         }

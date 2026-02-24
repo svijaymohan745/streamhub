@@ -58,9 +58,9 @@
                 style="position: fixed; top: 1rem; left: 1rem; right: 1rem; display: flex; justify-content: space-between; align-items: flex-start; z-index: 100; pointer-events: none;">
 
                 <div style="pointer-events: auto;">
-                    <a href="https://stream.hulksmash.ca" target="_blank" class="icon-btn"
+                    <a href="https://stream.hulksmash.ca" target="_blank" rel="noopener noreferrer" class="icon-btn"
                         style="position: static !important; display: inline-block; text-decoration: none;"
-                        title="Full Site">
+                        onclick="window.open(this.href, '_blank'); return false;" title="Full Site">
                         <i class="fa-solid fa-arrow-up-right-from-square"></i> <span class="nav-text">Full Site</span>
                     </a>
                 </div>
@@ -90,7 +90,7 @@
             <div class="search-container">
                 <div class="search-box">
                     <i class="fa-solid fa-search search-icon"></i>
-                    <input type="text" id="movie-search" placeholder="Search for a movie..." autocomplete="off">
+                    <input type="text" id="movie-search" placeholder="Search for a movie or show..." autocomplete="off">
                     <i class="fa-solid fa-spinner fa-spin loader-icon hidden" id="search-spinner"></i>
                 </div>
 
@@ -121,13 +121,14 @@
                     <p id="detail-overview" class="overview"></p>
                     <a id="btn-jellyfin" class="hidden"
                         style="display: inline-flex; align-items: center; margin-top: 15px; margin-bottom: 25px; padding: 10px 20px; font-size: 1.1rem; font-weight: 600; background: var(--accent); color: #fff; text-decoration: none; border-radius: 8px; transition: background 0.3s ease, transform 0.2s; box-shadow: 0 4px 15px rgba(35, 134, 54, 0.4);"
-                        href="#" target="_blank" title="Watch on H-TV">
+                        href="#" target="_blank" rel="noopener noreferrer"
+                        onclick="window.open(this.href, '_blank'); return false;" title="Watch on H-TV">
                         <i class="fa-solid fa-play" style="margin-right: 12px; font-size: 1.2rem;"></i>
                         Already Available on H-TV
                     </a>
 
                     <a id="btn-request" class="hidden"
-                        style="display: inline-flex; align-items: center; margin-top: 15px; margin-bottom: 25px; padding: 10px 20px; font-size: 1.1rem; font-weight: 600; background: #667eea; color: #fff; text-decoration: none; border-radius: 8px; transition: background 0.3s ease, transform 0.2s; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4); cursor: pointer;"
+                        style="display: inline-flex; align-items: center; margin-top: 15px; margin-bottom: 25px; padding: 10px 20px; font-size: 1.1rem; font-weight: 600; background: var(--accent); color: #fff; text-decoration: none; border-radius: 8px; transition: background 0.3s ease, transform 0.2s; box-shadow: 0 4px 15px rgba(35, 134, 54, 0.4); cursor: pointer;"
                         title="Request on Jellyseerr">
                         <i class="fa-solid fa-cloud-arrow-up" style="margin-right: 12px; font-size: 1.2rem;"></i>
                         <span id="btn-request-text">Request Movie</span>

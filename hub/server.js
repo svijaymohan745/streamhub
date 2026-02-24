@@ -234,26 +234,20 @@ app.get('/api/jellyfin/check', async (req, res) => {
     try {
         const jfUrl = (process.env.JELLYFIN_URL || 'http://192.168.2.54:1000').replace(/\/$/, '');
         const jfExternalUrl = (process.env.JELLYFIN_EXTERNAL_URL || jfUrl).replace(/\/$/, '');
-        
+
+        const queryUrl = `${jfUrl}/Items?IncludeItemTypes=Movie,Series&Recursive=true&searchTerm=${title}&Fields=ProviderIds`;
+        const response = await axios.get(queryUrl, { headers: { 'X-Emby-Token': process.env.JELLYFIN_API_KEY } });
+
         let match = null;
 
-        // Try strict TMDB ID match first
-        if (tmdbId) {
-            const strictUrl = `${jfUrl}/Items?IncludeItemTypes=Movie,Series&Recursive=true&AnyProviderIdEquals=tmdb.${tmdbId}`;
-            try {
-                const strictRes = await axios.get(strictUrl, { headers: { 'X-Emby-Token': process.env.JELLYFIN_API_KEY } });
-                if (strictRes.data.Items && strictRes.data.Items.length > 0) {
-                    match = strictRes.data.Items[0];
-                }
-            } catch(e) { console.error('TMDB Exact Match Error', e.message); }
-        }
+        if (response.data.Items && response.data.Items.length > 0) {
+            // 1. Strict TMDB ID matching explicitly on the Node backend dictionary to bypass Jellyfin proxy parameter bugs
+            if (tmdbId) {
+                match = response.data.Items.find(item => item.ProviderIds && item.ProviderIds.Tmdb === tmdbId.toString());
+            }
 
-        // Fallback to fuzzy title text search, but strictly enforce exact string equivalency
-        if (!match) {
-            const queryUrl = `${jfUrl}/Items?IncludeItemTypes=Movie,Series&Recursive=true&searchTerm=${title}`;
-            const response = await axios.get(queryUrl, { headers: { 'X-Emby-Token': process.env.JELLYFIN_API_KEY } });
-            
-            if (response.data.Items && response.data.Items.length > 0) {
+            // 2. Fallback to strict exact-string equivalency
+            if (!match) {
                 match = response.data.Items.find(item => item.Name.toLowerCase() === title.toLowerCase());
             }
         }
@@ -277,16 +271,16 @@ app.get('/api/jellyseerr/options', async (req, res) => {
     if (!process.env.JELLYSEERR_API_KEY || !process.env.JELLYSEERR_URL) {
         return res.json({ configured: false });
     }
-    
+
     try {
         const baseUrl = process.env.JELLYSEERR_URL.replace(/\/$/, '') + '/api/v1';
         const apiKey = process.env.JELLYSEERR_API_KEY;
-        
+
         const [radarrRes, sonarrRes] = await Promise.all([
             axios.get(`${baseUrl}/settings/radarr`, { headers: { 'X-Api-Key': apiKey } }).catch(() => ({ data: [] })),
             axios.get(`${baseUrl}/settings/sonarr`, { headers: { 'X-Api-Key': apiKey } }).catch(() => ({ data: [] }))
         ]);
-        
+
         res.json({
             configured: true,
             radarr: radarrRes.data.length > 0 ? radarrRes.data[0] : null,
@@ -300,11 +294,11 @@ app.get('/api/jellyseerr/options', async (req, res) => {
 
 app.post('/api/jellyseerr/request', async (req, res) => {
     if (!process.env.JELLYSEERR_API_KEY || !process.env.JELLYSEERR_URL) return res.status(500).json({ error: 'Not configured' });
-    
+
     try {
         const baseUrl = process.env.JELLYSEERR_URL.replace(/\/$/, '') + '/api/v1';
         const { mediaId, mediaType, serverId, profileId, rootFolder } = req.body;
-        
+
         // Overseerr dynamically merges payload objects
         const payload = { mediaId, mediaType };
         if (serverId !== undefined) payload.serverId = serverId;
@@ -314,7 +308,7 @@ app.post('/api/jellyseerr/request', async (req, res) => {
         const response = await axios.post(`${baseUrl}/request`, payload, {
             headers: { 'X-Api-Key': process.env.JELLYSEERR_API_KEY }
         });
-        
+
         res.json({ success: true, data: response.data });
     } catch (e) {
         console.error('Jellyseerr Post Request Error:', e.response ? e.response.data : e.message);
