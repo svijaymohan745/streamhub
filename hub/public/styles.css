@@ -25,12 +25,10 @@ body {
 /* Background Effects */
 .backdrop {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 100dvh;
-    width: 100vw;
+    top: -50%;
+    left: -50%;
+    height: 200vh;
+    width: 200vw;
     background-size: cover;
     background-position: center;
     filter: blur(8px) brightness(0.4);
@@ -40,13 +38,11 @@ body {
 
 .vignette {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 100dvh;
-    width: 100vw;
-    background: radial-gradient(circle at center, transparent 0%, var(--bg-color) 100%);
+    top: -50%;
+    left: -50%;
+    height: 200vh;
+    width: 200vw;
+    background: radial-gradient(ellipse at center, transparent 0%, var(--bg-color) 40%);
     z-index: -1;
 }
 

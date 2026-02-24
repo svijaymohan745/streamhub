@@ -331,20 +331,15 @@ async function loadMovieDetails(id, mediaType = 'movie', pushHistory = true) {
         if (jellyfinBtn) {
             jellyfinBtn.classList.add('hidden');
             jellyfinBtn.href = "#";
-
-            const token = getCookie('jellyfinToken');
-            const userId = getCookie('jellyfinUserId');
-            if (token && userId) {
-                try {
-                    const cleanTitle = fetchedTitle.replace(/[:\-]/g, ' ').replace(/\s+/g, ' ').trim();
-                    const jfRes = await fetch(`/api/jellyfin/check?title=${encodeURIComponent(cleanTitle)}&token=${token}&userId=${userId}`);
-                    const jfData = await jfRes.json();
-                    if (jfData.exists) {
-                        jellyfinBtn.href = `http://192.168.2.54:1000/web/index.html#!/details?id=${jfData.id}`;
-                        jellyfinBtn.classList.remove('hidden');
-                    }
-                } catch (e) { console.error("Jellyfin check failed:", e); }
-            }
+            try {
+                // Pass the exact string without stripping colons
+                const jfRes = await fetch(`/api/jellyfin/check?title=${encodeURIComponent(fetchedTitle)}`);
+                const jfData = await jfRes.json();
+                if (jfData.exists && jfData.url) {
+                    jellyfinBtn.href = jfData.url;
+                    jellyfinBtn.classList.remove('hidden');
+                }
+            } catch (e) { console.error("Jellyfin check failed:", e); }
         }
 
         if (data.poster_path) {
