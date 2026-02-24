@@ -724,8 +724,8 @@ function renderAdminLiveGrid(streams) {
                     <div style="font-size:0.9rem; color:#aaa;"><i class="fa-solid fa-play" style="font-size:0.7rem; margin-right:5px; color:#ff4757;"></i>${s.title}</div>
                 </div>
                 <div style="display:flex; gap: 8px;">
-                    <button class="icon-btn" style="position: static !important; padding: 4px 8px; font-size:0.8rem;" onclick="window.emitAdminAction('${s.socketId}', 'pause')"><i class="fa-solid fa-pause"></i></button>
-                    <button class="icon-btn" style="position: static !important; padding: 4px 8px; font-size:0.8rem; border-color:#ff4757; color:#ff4757;" onclick="window.emitAdminAction('${s.socketId}', 'stop')"><i class="fa-solid fa-stop"></i></button>
+                    <button class="admin-action-btn" style="font-size:0.8rem;" onclick="window.emitAdminAction('${s.socketId}', 'pause')"><i class="fa-solid fa-pause"></i> Pause</button>
+                    <button class="admin-action-btn" style="font-size:0.8rem; border-color:#ff4757; color:#ff4757;" onclick="window.emitAdminAction('${s.socketId}', 'stop')"><i class="fa-solid fa-stop"></i> Stop</button>
                 </div>
             </div>
             

@@ -11,6 +11,8 @@ services:
       - PROWLARR_URL=${PROWLARR_URL}
       - PROWLARR_API_KEY=${PROWLARR_API_KEY}
       - STREAMER_URL=${STREAMER_URL}
+      - JELLYFIN_URL=${JELLYFIN_URL}
+      - JELLYFIN_API_KEY=${JELLYFIN_API_KEY}
     restart: unless-stopped
     volumes:
       - ./data:/usr/src/app/data

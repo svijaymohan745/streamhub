@@ -425,6 +425,24 @@ body {
     background: rgba(255, 255, 255, 0.2);
 }
 
+.admin-action-btn {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--glass-border);
+    color: var(--text-primary);
+    border-radius: 4px;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: inherit;
+}
+
+.admin-action-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
 .content-wrapper {
     display: flex;
     gap: 3rem;

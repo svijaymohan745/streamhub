@@ -223,26 +223,34 @@ app.post('/api/login', async (req, res) => {
 
 // --- Phase 5 API: Check if Media Exists in Jellyfin ---
 app.get('/api/jellyfin/check', async (req, res) => {
-    const { title, token, userId } = req.query;
-    if (!title || !token || !userId) return res.json({ exists: false });
+    const { title } = req.query;
+    if (!title) return res.json({ exists: false });
+
+    if (!process.env.JELLYFIN_API_KEY) {
+        console.warn('JELLYFIN_API_KEY is not set. Deep linking disabled.');
+        return res.json({ exists: false });
+    }
 
     try {
-        const jellyfinUrl = `http://192.168.2.54:1000/Users/${userId}/Items`;
-        const response = await axios.get(jellyfinUrl, {
+        const jfUrl = process.env.JELLYFIN_URL || 'http://192.168.2.54:1000';
+        const response = await axios.get(`${jfUrl}/Items`, {
             params: {
                 searchTerm: title,
                 IncludeItemTypes: 'Movie,Series',
                 Recursive: 'true'
             },
             headers: {
-                'X-Emby-Token': token
+                'X-Emby-Token': process.env.JELLYFIN_API_KEY
             }
         });
 
         if (response.data.Items && response.data.Items.length > 0) {
             // Find an exact match or closest
             const match = response.data.Items[0];
-            return res.json({ exists: true, id: match.Id });
+            return res.json({
+                exists: true,
+                url: `${jfUrl}/web/index.html#!/details?id=${match.Id}`
+            });
         }
         res.json({ exists: false });
     } catch (error) {
