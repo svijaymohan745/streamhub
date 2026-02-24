@@ -223,7 +223,7 @@ app.post('/api/login', async (req, res) => {
 
 // --- Phase 5 API: Check if Media Exists in Jellyfin ---
 app.get('/api/jellyfin/check', async (req, res) => {
-    const { title } = req.query;
+    const { title, tmdbId } = req.query;
     if (!title) return res.json({ exists: false });
 
     if (!process.env.JELLYFIN_API_KEY) {
@@ -234,20 +234,31 @@ app.get('/api/jellyfin/check', async (req, res) => {
     try {
         const jfUrl = (process.env.JELLYFIN_URL || 'http://192.168.2.54:1000').replace(/\/$/, '');
         const jfExternalUrl = (process.env.JELLYFIN_EXTERNAL_URL || jfUrl).replace(/\/$/, '');
+        
+        let match = null;
 
-        // Axios params natively URL-encodes colons into %3A. Jellyfin strictly requires raw colons (e.g., '28 Years: The Movie')
-        // to execute valid DB matches. We must build the URL manually to bypass Axios encoding.
-        const queryUrl = `${jfUrl}/Items?IncludeItemTypes=Movie,Series&Recursive=true&searchTerm=${title}`;
+        // Try strict TMDB ID match first
+        if (tmdbId) {
+            const strictUrl = `${jfUrl}/Items?IncludeItemTypes=Movie,Series&Recursive=true&AnyProviderIdEquals=tmdb.${tmdbId}`;
+            try {
+                const strictRes = await axios.get(strictUrl, { headers: { 'X-Emby-Token': process.env.JELLYFIN_API_KEY } });
+                if (strictRes.data.Items && strictRes.data.Items.length > 0) {
+                    match = strictRes.data.Items[0];
+                }
+            } catch(e) { console.error('TMDB Exact Match Error', e.message); }
+        }
 
-        const response = await axios.get(queryUrl, {
-            headers: {
-                'X-Emby-Token': process.env.JELLYFIN_API_KEY
+        // Fallback to fuzzy title text search, but strictly enforce exact string equivalency
+        if (!match) {
+            const queryUrl = `${jfUrl}/Items?IncludeItemTypes=Movie,Series&Recursive=true&searchTerm=${title}`;
+            const response = await axios.get(queryUrl, { headers: { 'X-Emby-Token': process.env.JELLYFIN_API_KEY } });
+            
+            if (response.data.Items && response.data.Items.length > 0) {
+                match = response.data.Items.find(item => item.Name.toLowerCase() === title.toLowerCase());
             }
-        });
+        }
 
-        if (response.data.Items && response.data.Items.length > 0) {
-            // Find an exact match or closest
-            const match = response.data.Items[0];
+        if (match) {
             return res.json({
                 exists: true,
                 id: match.Id,
@@ -256,8 +267,58 @@ app.get('/api/jellyfin/check', async (req, res) => {
         }
         res.json({ exists: false });
     } catch (error) {
-        console.error('Jellyfin Check Error:', error.message);
-        res.json({ exists: false });
+        console.error('Jellyfin check error:', error.message);
+        res.status(500).json({ error: 'Failed to verify Jellyfin status' });
+    }
+});
+
+// Jellyseerr Media Requests Integration
+app.get('/api/jellyseerr/options', async (req, res) => {
+    if (!process.env.JELLYSEERR_API_KEY || !process.env.JELLYSEERR_URL) {
+        return res.json({ configured: false });
+    }
+    
+    try {
+        const baseUrl = process.env.JELLYSEERR_URL.replace(/\/$/, '') + '/api/v1';
+        const apiKey = process.env.JELLYSEERR_API_KEY;
+        
+        const [radarrRes, sonarrRes] = await Promise.all([
+            axios.get(`${baseUrl}/settings/radarr`, { headers: { 'X-Api-Key': apiKey } }).catch(() => ({ data: [] })),
+            axios.get(`${baseUrl}/settings/sonarr`, { headers: { 'X-Api-Key': apiKey } }).catch(() => ({ data: [] }))
+        ]);
+        
+        res.json({
+            configured: true,
+            radarr: radarrRes.data.length > 0 ? radarrRes.data[0] : null,
+            sonarr: sonarrRes.data.length > 0 ? sonarrRes.data[0] : null
+        });
+    } catch (e) {
+        console.error('Jellyseerr Options Error:', e.message);
+        res.status(500).json({ error: 'Failed to fetch Overseerr endpoints' });
+    }
+});
+
+app.post('/api/jellyseerr/request', async (req, res) => {
+    if (!process.env.JELLYSEERR_API_KEY || !process.env.JELLYSEERR_URL) return res.status(500).json({ error: 'Not configured' });
+    
+    try {
+        const baseUrl = process.env.JELLYSEERR_URL.replace(/\/$/, '') + '/api/v1';
+        const { mediaId, mediaType, serverId, profileId, rootFolder } = req.body;
+        
+        // Overseerr dynamically merges payload objects
+        const payload = { mediaId, mediaType };
+        if (serverId !== undefined) payload.serverId = serverId;
+        if (profileId !== undefined) payload.profileId = profileId;
+        if (rootFolder !== undefined) payload.rootFolder = rootFolder;
+
+        const response = await axios.post(`${baseUrl}/request`, payload, {
+            headers: { 'X-Api-Key': process.env.JELLYSEERR_API_KEY }
+        });
+        
+        res.json({ success: true, data: response.data });
+    } catch (e) {
+        console.error('Jellyseerr Post Request Error:', e.response ? e.response.data : e.message);
+        res.status(500).json({ success: false, error: 'Failed to push request to Jellyseerr' });
     }
 });
 

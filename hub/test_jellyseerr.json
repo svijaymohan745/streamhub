@@ -1,0 +1,48 @@
+{
+  "radarr": [
+    {
+      "name": "Radarr",
+      "hostname": "192.168.2.54",
+      "port": 7878,
+      "apiKey": "0bf31e06aa624207ab45730754105e43",
+      "useSsl": false,
+      "baseUrl": "",
+      "activeProfileId": 7,
+      "activeProfileName": "Requested Movies",
+      "activeDirectory": "/media/Movies",
+      "is4k": false,
+      "minimumAvailability": "released",
+      "tags": [
+        5
+      ],
+      "isDefault": true,
+      "syncEnabled": true,
+      "preventSearch": false,
+      "tagRequests": false,
+      "id": 0
+    }
+  ],
+  "sonarr": [
+    {
+      "name": "Sonarr",
+      "hostname": "192.168.2.54",
+      "port": 8989,
+      "apiKey": "8cbde907fd904263be46437f2de4e91c",
+      "useSsl": false,
+      "activeProfileId": 4,
+      "activeProfileName": "HD-1080p",
+      "activeDirectory": "/media/TV Series",
+      "tags": [
+        1
+      ],
+      "animeTags": [],
+      "is4k": false,
+      "isDefault": true,
+      "enableSeasonFolders": true,
+      "syncEnabled": true,
+      "preventSearch": false,
+      "tagRequests": false,
+      "id": 0
+    }
+  ]
+}

@@ -126,6 +126,13 @@
                         Already Available on H-TV
                     </a>
 
+                    <a id="btn-request" class="hidden"
+                        style="display: inline-flex; align-items: center; margin-top: 15px; margin-bottom: 25px; padding: 10px 20px; font-size: 1.1rem; font-weight: 600; background: #667eea; color: #fff; text-decoration: none; border-radius: 8px; transition: background 0.3s ease, transform 0.2s; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4); cursor: pointer;"
+                        title="Request on Jellyseerr">
+                        <i class="fa-solid fa-cloud-arrow-up" style="margin-right: 12px; font-size: 1.2rem;"></i>
+                        <span id="btn-request-text">Request Movie</span>
+                    </a>
+
                     <!-- TV Show Specific UI (Hidden by default for Movies) -->
                     <div id="tv-season-section" class="tv-season-section hidden">
                         <div class="season-header">
@@ -238,6 +245,49 @@
         </section>
 
     </div> <!-- End Scroll Container -->
+
+    <!-- Jellyseerr Request Modal -->
+    <div id="request-modal" class="modal hidden"
+        style="position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 2000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+        <div class="modal-content overseerr-modal">
+            <div class="modal-header">
+                <h2 id="request-modal-title">Request Movie</h2>
+                <button id="btn-close-request" class="icon-btn"
+                    style="position: static; background:transparent; color: #fff; border:none; padding: 5px; box-shadow: none;"><i
+                        class="fa-solid fa-xmark" style="font-size: 1.5rem;"></i></button>
+            </div>
+            <div class="modal-body">
+                <div style="display: flex; gap: 15px; margin-bottom: 20px; align-items: center;">
+                    <img id="request-poster" src=""
+                        style="width: 50px; border-radius: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
+                    <h3 id="request-item-title" style="margin: 0; font-size: 1.2rem; font-weight: 600;"></h3>
+                </div>
+
+                <h4
+                    style="margin: 0 0 15px 0; color: #a9a9b3; font-weight: 600; font-size: 0.95rem; border-top: 1px solid #3e3e4a; padding-top: 15px;">
+                    Advanced Options</h4>
+
+                <div class="overseerr-grid">
+                    <div class="overseerr-field">
+                        <label>Destination Server</label>
+                        <select id="request-server"></select>
+                    </div>
+                    <div class="overseerr-field">
+                        <label>Quality Profile</label>
+                        <select id="request-profile"></select>
+                    </div>
+                    <div class="overseerr-field full-width">
+                        <label>Root Folder</label>
+                        <select id="request-folder"></select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px;">
+                <button id="btn-cancel-request" class="overseerr-btn secondary">Cancel</button>
+                <button id="btn-submit-request" class="overseerr-btn primary">Request</button>
+            </div>
+        </div>
+    </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="/app.js?v=7"></script>

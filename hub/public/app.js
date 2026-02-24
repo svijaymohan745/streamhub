@@ -141,6 +141,14 @@ function showHistoryView() {
     loadWatchHistory();
 }
 
+let jellyseerrConfig = null; // Global fetch config
+
+// Pre-fetch Jellyseerr configurations on app startup
+fetch('/api/jellyseerr/options')
+    .then(r => r.json())
+    .then(d => { jellyseerrConfig = d; })
+    .catch(e => console.error("Jellyseerr init error:", e));
+
 // Global active state tracking
 let currentMovieId = null;
 let currentMediaType = 'movie'; // 'movie' or 'tv'
@@ -328,17 +336,30 @@ async function loadMovieDetails(id, mediaType = 'movie', pushHistory = true) {
 
         // Check Jellyfin for deep link
         const jellyfinBtn = document.getElementById('btn-jellyfin');
+        const requestBtn = document.getElementById('btn-request');
+
+        if (jellyfinBtn) jellyfinBtn.classList.add('hidden');
+        if (requestBtn) requestBtn.classList.add('hidden');
+
         if (jellyfinBtn) {
-            jellyfinBtn.classList.add('hidden');
             jellyfinBtn.href = "#";
             try {
-                // Pass the exact string without stripping colons
-                // Note: encodeURIComponent encodes colons into %3A which breaks Jellyfin search natively
-                const jfRes = await fetch(`/api/jellyfin/check?title=${fetchedTitle}`);
+                // Pass exactly URI encoded TMDB title + Explicit TMDB ID for strict provider matching
+                const jfRes = await fetch(`/api/jellyfin/check?title=${encodeURIComponent(fetchedTitle)}&tmdbId=${data.id}`);
                 const jfData = await jfRes.json();
+
                 if (jfData.exists && jfData.url) {
                     jellyfinBtn.href = jfData.url;
                     jellyfinBtn.classList.remove('hidden');
+                } else if (jellyseerrConfig && jellyseerrConfig.configured && requestBtn) {
+                    // Show Jellyseerr Request Button if missing from Jellyfin
+                    requestBtn.style.background = '#667eea';
+                    requestBtn.style.pointerEvents = 'auto';
+                    requestBtn.innerHTML = `<i class="fa-solid fa-cloud-arrow-up" style="margin-right: 12px; font-size: 1.2rem;"></i> <span id="btn-request-text">${mediaType === 'movie' ? 'Request Movie' : 'Request Show'}</span>`;
+                    requestBtn.classList.remove('hidden');
+
+                    // Attach modal handler
+                    requestBtn.onclick = () => openRequestModal(data, mediaType);
                 }
             } catch (e) { console.error("Jellyfin check failed:", e); }
         }
@@ -811,3 +832,78 @@ document.getElementById('btn-admin').addEventListener('click', () => {
 document.getElementById('btn-back-admin').addEventListener('click', () => {
     history.back();
 });
+
+// --- Jellyseerr Request Modal Logic ---
+function openRequestModal(data, type) {
+    const modal = document.getElementById('request-modal');
+    modal.classList.remove('hidden');
+
+    document.getElementById('request-modal-title').innerText = type === 'movie' ? 'Request Movie' : 'Request Show';
+    document.getElementById('request-item-title').innerText = data.title || data.name;
+    document.getElementById('request-poster').src = `https://image.tmdb.org/t/p/w200${data.poster_path}`;
+
+    // Reset Drops
+    const serverSelect = document.getElementById('request-server');
+    const profileSelect = document.getElementById('request-profile');
+    const folderSelect = document.getElementById('request-folder');
+    serverSelect.innerHTML = '';
+    profileSelect.innerHTML = '';
+    folderSelect.innerHTML = '';
+
+    const config = type === 'movie' ? jellyseerrConfig.radarr : jellyseerrConfig.sonarr;
+
+    if (config) {
+        // Hydrate UI dynamically from Overseerr Active Preferences payload
+        serverSelect.innerHTML = `<option value="${config.id}">${config.name}</option>`;
+        profileSelect.innerHTML = `<option value="${config.activeProfileId}">${config.activeProfileName}</option>`;
+        folderSelect.innerHTML = `<option value="${config.activeDirectory}">${config.activeDirectory}</option>`;
+    } else {
+        serverSelect.innerHTML = `<option>N/A (Default)</option>`;
+        profileSelect.innerHTML = `<option>N/A (Default)</option>`;
+        folderSelect.innerHTML = `<option>N/A (Default)</option>`;
+    }
+
+    document.getElementById('btn-submit-request').onclick = async () => {
+        try {
+            document.getElementById('btn-submit-request').innerText = 'Requesting...';
+            document.getElementById('btn-submit-request').disabled = true;
+
+            const payload = {
+                mediaId: data.id,
+                mediaType: type
+            };
+            if (config) {
+                payload.serverId = parseInt(serverSelect.value);
+                payload.profileId = parseInt(profileSelect.value);
+                payload.rootFolder = folderSelect.value;
+            }
+
+            const res = await fetch('/api/jellyseerr/request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await res.json();
+
+            if (result.success) {
+                modal.classList.add('hidden');
+                const reqBtn = document.getElementById('btn-request');
+                reqBtn.style.background = '#4a5568';
+                reqBtn.style.pointerEvents = 'none';
+                reqBtn.innerHTML = '<i class="fa-solid fa-check" style="margin-right: 12px; font-size: 1.2rem;"></i><span>Requested Successfully</span>';
+            } else {
+                alert('Request failed. Overseerr declined interaction.');
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Request error. Service may be unreachable.');
+        } finally {
+            document.getElementById('btn-submit-request').innerText = 'Request';
+            document.getElementById('btn-submit-request').disabled = false;
+        }
+    };
+
+    // Close Triggers
+    document.getElementById('btn-cancel-request').onclick = () => modal.classList.add('hidden');
+    document.getElementById('btn-close-request').onclick = () => modal.classList.add('hidden');
+}
