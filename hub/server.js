@@ -17,9 +17,25 @@ const activeStreams = {};
 
 io.on('connection', (socket) => {
     socket.on('start_stream', (data) => {
-        // data expected: { user_id, title }
-        activeStreams[socket.id] = { ...data, ip: socket.handshake.address, startTime: Date.now() };
+        // data expected: { user_id, title, device }
+        let clientIp = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address;
+        if (clientIp.includes(',')) clientIp = clientIp.split(',')[0].trim(); // Get originated IP if behind proxy
+
+        activeStreams[socket.id] = { ...data, ip: clientIp, startTime: Date.now(), socketId: socket.id, progress: 0 };
         io.emit('active_streams', Object.values(activeStreams));
+    });
+
+    socket.on('update_progress', (data) => {
+        if (activeStreams[socket.id]) {
+            activeStreams[socket.id].progress = data.progress;
+            io.emit('active_streams', Object.values(activeStreams));
+        }
+    });
+
+    socket.on('admin_action', (data) => {
+        if (data.socketId && data.action) {
+            io.to(data.socketId).emit('remote_action', { action: data.action });
+        }
     });
 
     socket.on('stop_stream', () => {

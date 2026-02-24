@@ -233,7 +233,8 @@ body {
 }
 
 .floating-logout,
-.floating-history {
+.floating-history,
+.floating-admin {
     position: relative !important;
     top: auto !important;
     right: auto !important;

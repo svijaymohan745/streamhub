@@ -512,7 +512,17 @@ function startStream(magnetUri, pushHistory = true) {
 
                 if (typeof socket !== 'undefined' && socket) {
                     const tTitle = document.getElementById('detail-title').innerText;
-                    socket.emit('start_stream', { user_id: getCookie('jellyfinUser'), title: tTitle });
+
+                    let deviceName = 'Desktop';
+                    const ua = navigator.userAgent;
+                    if (/iPhone/.test(ua)) deviceName = 'iPhone';
+                    else if (/iPad/.test(ua)) deviceName = 'iPad';
+                    else if (/Android/.test(ua)) deviceName = 'Android';
+                    else if (/Macintosh/.test(ua)) deviceName = 'Mac';
+                    else if (/Windows/.test(ua)) deviceName = 'Windows';
+                    else if (/Linux/.test(ua)) deviceName = 'Linux';
+
+                    socket.emit('start_stream', { user_id: getCookie('jellyfinUser'), title: tTitle, device: deviceName });
                 }
             };
 
@@ -521,6 +531,17 @@ function startStream(magnetUri, pushHistory = true) {
                 overlay.style.opacity = '1';
                 overlay.querySelector('p').innerText = "Buffering from peers...";
             };
+
+            video.addEventListener('timeupdate', () => {
+                if (typeof socket !== 'undefined' && socket && video.duration > 0) {
+                    const pct = (video.currentTime / video.duration) * 100;
+                    const now = Date.now();
+                    if (!video.lastProgressEmit || now - video.lastProgressEmit > 5000) {
+                        video.lastProgressEmit = now;
+                        socket.emit('update_progress', { progress: pct });
+                    }
+                }
+            });
         })
         .catch(e => {
             alert('Magnet resolution failed.');
@@ -653,7 +674,21 @@ if (typeof io !== 'undefined') {
     socket.on('active_streams', (streams) => {
         renderAdminLiveGrid(streams);
     });
+    socket.on('remote_action', (data) => {
+        const video = document.getElementById('video-element');
+        if (!video) return;
+        if (data.action === 'pause') {
+            video.pause();
+        } else if (data.action === 'stop') {
+            video.pause();
+            document.getElementById('btn-close-player').click();
+        }
+    });
 }
+
+window.emitAdminAction = function (socketId, action) {
+    if (socket) socket.emit('admin_action', { socketId, action });
+};
 
 function renderAdminLiveGrid(streams) {
     const grid = document.getElementById('admin-live-grid');
@@ -673,10 +708,24 @@ function renderAdminLiveGrid(streams) {
         item.style.borderLeft = '4px solid #ff4757';
 
         const minutes = Math.floor((Date.now() - s.startTime) / 60000);
+        const prog = s.progress ? s.progress.toFixed(1) : 0;
 
         item.innerHTML = `
-            <div style="font-weight:bold; color:#fff;">${s.user_id}</div>
-            <div style="font-size:0.9rem; color:#aaa;"><i class="fa-solid fa-play" style="font-size:0.7rem; margin-right:5px; color:#ff4757;"></i>${s.title}</div>
+            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                <div>
+                    <div style="font-weight:bold; color:#fff;">${s.user_id} <span style="font-size:0.75rem; color:#aaa; font-weight:normal;">(${s.device || 'Unknown'})</span></div>
+                    <div style="font-size:0.9rem; color:#aaa;"><i class="fa-solid fa-play" style="font-size:0.7rem; margin-right:5px; color:#ff4757;"></i>${s.title}</div>
+                </div>
+                <div style="display:flex; gap: 8px;">
+                    <button class="icon-btn" style="padding: 4px 8px; font-size:0.8rem;" onclick="window.emitAdminAction('${s.socketId}', 'pause')"><i class="fa-solid fa-pause"></i></button>
+                    <button class="icon-btn" style="padding: 4px 8px; font-size:0.8rem; border-color:#ff4757; color:#ff4757;" onclick="window.emitAdminAction('${s.socketId}', 'stop')"><i class="fa-solid fa-stop"></i></button>
+                </div>
+            </div>
+            
+            <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); margin-top: 12px; margin-bottom: 8px; border-radius:2px; overflow:hidden;">
+                <div style="width: ${prog}%; height: 100%; background: #ff4757; transition: width 0.5s;"></div>
+            </div>
+
             <div style="font-size:0.8rem; color:#666; margin-top:5px; display:flex; justify-content:space-between;">
                 <span>IP: ${s.ip.replace('::ffff:', '')}</span>
                 <span>${minutes}m ago</span>
