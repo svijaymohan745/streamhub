@@ -233,6 +233,7 @@ app.get('/api/jellyfin/check', async (req, res) => {
 
     try {
         const jfUrl = (process.env.JELLYFIN_URL || 'http://192.168.2.54:1000').replace(/\/$/, '');
+        const jfExternalUrl = (process.env.JELLYFIN_EXTERNAL_URL || jfUrl).replace(/\/$/, '');
 
         // Axios params natively URL-encodes colons into %3A. Jellyfin strictly requires raw colons (e.g., '28 Years: The Movie')
         // to execute valid DB matches. We must build the URL manually to bypass Axios encoding.
@@ -249,7 +250,8 @@ app.get('/api/jellyfin/check', async (req, res) => {
             const match = response.data.Items[0];
             return res.json({
                 exists: true,
-                url: `${jfUrl}/web/index.html#!/details?id=${match.Id}`
+                id: match.Id,
+                url: `${jfExternalUrl}/web/index.html#!/details?id=${match.Id}`
             });
         }
         res.json({ exists: false });
