@@ -7,7 +7,7 @@
     <title>Streamhub - HTV</title>
     <!-- Google Fonts: Outfit for modern, premium look -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/styles.css?v=4">
+    <link rel="stylesheet" href="/styles.css?v=5">
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="/favicon.png">
     <!-- Font Awesome for sleek icons -->
@@ -117,6 +117,13 @@
                     <div class="movie-meta">
                         <span id="detail-year" class="tag"></span>
                         <span id="detail-rating" class="tag bg-gold"><i class="fa-solid fa-star"></i> </span>
+                        <a id="btn-jellyfin" class="tag hidden"
+                            style="background:#00a4dc; color:#fff; text-decoration:none;" href="#" target="_top"
+                            title="Watch on Jellyfin">
+                            <img src="/favicon.png"
+                                style="height:14px; margin-right:5px; vertical-align:middle; filter: brightness(0) invert(1);">
+                            Jellyfin
+                        </a>
                     </div>
                     <p id="detail-overview" class="overview"></p>
 
@@ -234,7 +241,7 @@
     </div> <!-- End Scroll Container -->
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="/app.js?v=4"></script>
+    <script src="/app.js?v=5"></script>
 </body>
 
 </html>

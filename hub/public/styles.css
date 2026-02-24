@@ -24,13 +24,13 @@ body {
     height: 100vh;
 }
 
-/* Background Effects - Tied to absolute fixed body */
+/* Background Effects - Scaled to 140% bounds to defeat iOS Safari blur clipping bug */
 .backdrop {
     position: fixed;
-    top: 0;
-    left: 0;
-    height: 100%;
-    width: 100%;
+    top: -20vh;
+    left: -20vw;
+    height: 140vh;
+    width: 140vw;
     background-size: cover;
     background-position: center;
     filter: blur(8px) brightness(0.4);
@@ -41,11 +41,11 @@ body {
 
 .vignette {
     position: fixed;
-    top: 0;
-    left: 0;
-    height: 100%;
-    width: 100%;
-    background: radial-gradient(ellipse at center, transparent 0%, var(--bg-color) 40%);
+    top: -20vh;
+    left: -20vw;
+    height: 140vh;
+    width: 140vw;
+    background: radial-gradient(ellipse at center, transparent 0%, var(--bg-color) 65%);
     z-index: -1;
     pointer-events: none;
 }
