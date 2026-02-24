@@ -7,7 +7,7 @@
     <title>Streamhub - HTV</title>
     <!-- Google Fonts: Outfit for modern, premium look -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/styles.css?v=3">
+    <link rel="stylesheet" href="/styles.css?v=4">
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="/favicon.png">
     <!-- Font Awesome for sleek icons -->
@@ -22,211 +22,219 @@
     <div id="backdrop" class="backdrop"></div>
     <div class="vignette"></div>
 
-    <!-- JELLYFIN LOGIN VIEW -->
-    <section id="login-view" class="view login-view active">
-        <div class="login-box">
-            <img src="/HTV.png" alt="H-TV Logo" class="login-logo">
-            <h2>Streamhub</h2>
-            <p>Access your streaming proxy.</p>
+    <!-- Safari Overflow Hijack Container -->
+    <div class="scroll-container">
 
-            <form id="login-form">
-                <div class="input-group">
-                    <i class="fa-solid fa-user"></i>
-                    <input type="text" id="jellyfin-username" placeholder="Jellyfin Username" required
-                        autocomplete="username">
-                </div>
-                <div class="input-group">
-                    <i class="fa-solid fa-lock"></i>
-                    <input type="password" id="jellyfin-password" placeholder="Jellyfin Password" required
-                        autocomplete="current-password">
-                </div>
-                <button type="submit" class="btn-primary" id="btn-login">
-                    Sign In <i class="fa-solid fa-arrow-right"></i>
-                </button>
-                <div id="login-error" class="login-error hidden">Invalid credentials. Please try again.</div>
-            </form>
-        </div>
-    </section>
+        <!-- JELLYFIN LOGIN VIEW -->
+        <section id="login-view" class="view login-view active">
+            <div class="login-box">
+                <img src="/HTV.png" alt="H-TV Logo" class="login-logo">
+                <h2>Streamhub</h2>
+                <p>Access your streaming proxy.</p>
 
-    <!-- MAIN LANDING VIEW (Google Style Search) -->
-    <main id="search-view" class="view hidden">
-        <!-- Unified Top Navigation Bar -->
-        <div class="top-nav-bar"
-            style="position: fixed; top: 1rem; left: 1rem; right: 1rem; display: flex; justify-content: space-between; align-items: flex-start; z-index: 100; pointer-events: none;">
-
-            <div style="pointer-events: auto;">
-                <a href="https://stream.hulksmash.ca" target="_top" class="icon-btn"
-                    style="position: static !important; display: inline-block; text-decoration: none;"
-                    title="Full Site">
-                    <i class="fa-solid fa-arrow-up-right-from-square"></i> <span class="nav-text">Full Site</span>
-                </a>
-            </div>
-
-            <div
-                style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; pointer-events: auto; max-width: 70%;">
-                <button id="btn-admin" class="icon-btn hidden" title="Admin Dashboard"
-                    style="position: static !important;">
-                    <i class="fa-solid fa-server"></i> <span class="nav-text">Admin</span>
-                </button>
-                <button id="btn-history" class="icon-btn" title="Watch History" style="position: static !important;">
-                    <i class="fa-solid fa-clock-rotate-left"></i> <span class="nav-text">History</span>
-                </button>
-                <button id="btn-logout" class="icon-btn" title="Sign Out" style="position: static !important;">
-                    <span class="nav-text">Sign Out</span> <i class="fa-solid fa-right-from-bracket"></i>
-                </button>
-            </div>
-
-        </div>
-
-        <div class="brand-header">
-            <img src="/HTV.png" alt="H-TV Logo" class="brand-logo">
-            <h1 class="brand-title">Streamhub</h1>
-        </div>
-
-        <div class="search-container">
-            <div class="search-box">
-                <i class="fa-solid fa-search search-icon"></i>
-                <input type="text" id="movie-search" placeholder="Search for a movie..." autocomplete="off">
-                <i class="fa-solid fa-spinner fa-spin loader-icon hidden" id="search-spinner"></i>
-            </div>
-
-            <!-- TMDB Autocomplete Dropdown -->
-            <div id="autocomplete-results" class="autocomplete-dropdown hidden"></div>
-
-            <!-- Trending Pills -->
-            <div id="trending-pills" class="trending-pills">
-                <!-- Injected via JS -->
-            </div>
-        </div>
-    </main>
-
-    <!-- MOVIE DETAILS & TORRENT SOURCES VIEW -->
-    <section id="movie-details-view" class="view hidden">
-        <button id="btn-back" class="icon-btn"><i class="fa-solid fa-arrow-left"></i> Back</button>
-
-        <div class="content-wrapper">
-            <div class="movie-poster">
-                <img id="detail-poster" src="" alt="Movie Poster">
-            </div>
-            <div class="movie-info">
-                <h2 id="detail-title">Loading...</h2>
-                <div class="movie-meta">
-                    <span id="detail-year" class="tag"></span>
-                    <span id="detail-rating" class="tag bg-gold"><i class="fa-solid fa-star"></i> </span>
-                </div>
-                <p id="detail-overview" class="overview"></p>
-
-                <!-- TV Show Specific UI (Hidden by default for Movies) -->
-                <div id="tv-season-section" class="tv-season-section hidden">
-                    <div class="season-header">
-                        <h3>Select Season</h3>
-                        <select id="season-selector" class="season-dropdown">
-                            <!-- Injected dynamically -->
-                        </select>
+                <form id="login-form">
+                    <div class="input-group">
+                        <i class="fa-solid fa-user"></i>
+                        <input type="text" id="jellyfin-username" placeholder="Jellyfin Username" required
+                            autocomplete="username">
                     </div>
-                    <div id="episodes-grid" class="episodes-grid hidden">
-                        <!-- Episode Buttons injected dynamically -->
+                    <div class="input-group">
+                        <i class="fa-solid fa-lock"></i>
+                        <input type="password" id="jellyfin-password" placeholder="Jellyfin Password" required
+                            autocomplete="current-password">
+                    </div>
+                    <button type="submit" class="btn-primary" id="btn-login">
+                        Sign In <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                    <div id="login-error" class="login-error hidden">Invalid credentials. Please try again.</div>
+                </form>
+            </div>
+        </section>
+
+        <!-- MAIN LANDING VIEW (Google Style Search) -->
+        <main id="search-view" class="view hidden">
+            <!-- Unified Top Navigation Bar -->
+            <div class="top-nav-bar"
+                style="position: fixed; top: 1rem; left: 1rem; right: 1rem; display: flex; justify-content: space-between; align-items: flex-start; z-index: 100; pointer-events: none;">
+
+                <div style="pointer-events: auto;">
+                    <a href="https://stream.hulksmash.ca" target="_top" class="icon-btn"
+                        style="position: static !important; display: inline-block; text-decoration: none;"
+                        title="Full Site">
+                        <i class="fa-solid fa-arrow-up-right-from-square"></i> <span class="nav-text">Full Site</span>
+                    </a>
+                </div>
+
+                <div
+                    style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; pointer-events: auto; max-width: 70%;">
+                    <button id="btn-admin" class="icon-btn hidden" title="Admin Dashboard"
+                        style="position: static !important;">
+                        <i class="fa-solid fa-server"></i> <span class="nav-text">Admin</span>
+                    </button>
+                    <button id="btn-history" class="icon-btn" title="Watch History"
+                        style="position: static !important;">
+                        <i class="fa-solid fa-clock-rotate-left"></i> <span class="nav-text">History</span>
+                    </button>
+                    <button id="btn-logout" class="icon-btn" title="Sign Out" style="position: static !important;">
+                        <span class="nav-text">Sign Out</span> <i class="fa-solid fa-right-from-bracket"></i>
+                    </button>
+                </div>
+
+            </div>
+
+            <div class="brand-header">
+                <img src="/HTV.png" alt="H-TV Logo" class="brand-logo">
+                <h1 class="brand-title">Streamhub</h1>
+            </div>
+
+            <div class="search-container">
+                <div class="search-box">
+                    <i class="fa-solid fa-search search-icon"></i>
+                    <input type="text" id="movie-search" placeholder="Search for a movie..." autocomplete="off">
+                    <i class="fa-solid fa-spinner fa-spin loader-icon hidden" id="search-spinner"></i>
+                </div>
+
+                <!-- TMDB Autocomplete Dropdown -->
+                <div id="autocomplete-results" class="autocomplete-dropdown hidden"></div>
+
+                <!-- Trending Pills -->
+                <div id="trending-pills" class="trending-pills">
+                    <!-- Injected via JS -->
+                </div>
+            </div>
+        </main>
+
+        <!-- MOVIE DETAILS & TORRENT SOURCES VIEW -->
+        <section id="movie-details-view" class="view hidden">
+            <button id="btn-back" class="icon-btn"><i class="fa-solid fa-arrow-left"></i> Back</button>
+
+            <div class="content-wrapper">
+                <div class="movie-poster">
+                    <img id="detail-poster" src="" alt="Movie Poster">
+                </div>
+                <div class="movie-info">
+                    <h2 id="detail-title">Loading...</h2>
+                    <div class="movie-meta">
+                        <span id="detail-year" class="tag"></span>
+                        <span id="detail-rating" class="tag bg-gold"><i class="fa-solid fa-star"></i> </span>
+                    </div>
+                    <p id="detail-overview" class="overview"></p>
+
+                    <!-- TV Show Specific UI (Hidden by default for Movies) -->
+                    <div id="tv-season-section" class="tv-season-section hidden">
+                        <div class="season-header">
+                            <h3>Select Season</h3>
+                            <select id="season-selector" class="season-dropdown">
+                                <!-- Injected dynamically -->
+                            </select>
+                        </div>
+                        <div id="episodes-grid" class="episodes-grid hidden">
+                            <!-- Episode Buttons injected dynamically -->
+                        </div>
+                    </div>
+
+                    <div class="sources-section">
+                        <h3>Select a Stream</h3>
+                        <div id="sources-loader" class="sources-loader">
+                            <i class="fa-solid fa-satellite-dish fa-beat"></i> Searching...
+                        </div>
+                        <!-- Prowlarr Results grid injected here -->
+                        <div id="sources-grid" class="sources-grid hidden"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- WATCH HISTORY VIEW -->
+        <section id="history-view" class="view hidden">
+            <button id="btn-back-history" class="icon-btn" style="position:absolute; top: 2rem; left: 2rem;"><i
+                    class="fa-solid fa-arrow-left"></i> Back</button>
+            <div class="brand-header" style="margin-top: 2rem; margin-bottom: 3rem;">
+                <h2 class="brand-title" style="font-size: 2.5rem;">Watch History</h2>
+            </div>
+            <div class="search-container" style="max-width: 1000px; width: 90%;">
+                <div id="history-grid" class="sources-grid"
+                    style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));">
+                    <!-- History cards injected here -->
+                </div>
+                <div id="history-loader" class="sources-loader hidden">
+                    <i class="fa-solid fa-satellite-dish fa-beat"></i> Loading...
+                </div>
+                <p id="history-empty" class="hidden" style="text-align: center; color: var(--text-secondary);">No watch
+                    history found.</p>
+            </div>
+        </section>
+
+        <!-- VIDEO PLAYER VIEW -->
+        <section id="player-view" class="view hidden">
+            <button id="btn-close-player" class="icon-btn floating-close"><i class="fa-solid fa-xmark"></i></button>
+            <div class="player-container">
+                <video id="video-element" controls controlslist="nodownload" playsinline autoplay>
+                    Your browser does not support the video tag.
+                </video>
+                <div class="player-overlay" id="player-overlay">
+                    <div class="buffer-spinner">
+                        <i class="fa-solid fa-circle-notch fa-spin"></i>
+                        <p>Buffering from peers...</p>
+                    </div>
+                </div>
+                <!-- Custom Skip Controls -->
+                <div class="custom-controls" id="custom-controls">
+                    <button class="skip-btn" id="btn-skip-back"><i class="fa-solid fa-backward-step"></i> -10s</button>
+                    <button class="skip-btn" id="btn-skip-forward">+10s <i
+                            class="fa-solid fa-forward-step"></i></button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ADMIN DASHBOARD VIEW -->
+        <section id="admin-view" class="view hidden">
+            <button id="btn-back-admin" class="icon-btn" style="position:absolute; top: 2rem; left: 2rem;"><i
+                    class="fa-solid fa-arrow-left"></i> Back</button>
+            <div class="brand-header" style="margin-top: 2rem; margin-bottom: 2rem;">
+                <h2 class="brand-title" style="font-size: 2.5rem;"><i class="fa-solid fa-shield-halved"
+                        style="color:var(--accent); margin-right:10px;"></i>Admin Panel</h2>
+            </div>
+
+            <div class="search-container"
+                style="max-width: 1200px; width: 95%; display:flex; gap:2rem; flex-wrap:wrap;">
+
+                <!-- Live Active Streams -->
+                <div
+                    style="flex: 1; min-width: 300px; background: rgba(0,0,0,0.4); padding: 1.5rem; border: 1px solid var(--accent); border-radius: 12px;">
+                    <h3 style="margin-top:0; border-bottom:1px solid var(--glass-border); padding-bottom:10px;"><i
+                            class="fa-solid fa-satellite-dish fa-beat" style="color:#ff4757; margin-right:8px;"></i>Live
+                        Streams</h3>
+                    <div id="admin-live-grid" style="margin-top:1rem; display:flex; flex-direction:column; gap:10px;">
+                        <!-- Injected via socket.io -->
+                        <p style="color:var(--text-secondary);">No active streams.</p>
                     </div>
                 </div>
 
-                <div class="sources-section">
-                    <h3>Select a Stream</h3>
-                    <div id="sources-loader" class="sources-loader">
-                        <i class="fa-solid fa-satellite-dish fa-beat"></i> Searching...
+                <!-- Global Watch History Log -->
+                <div
+                    style="flex: 2; min-width: 400px; background: rgba(0,0,0,0.4); padding: 1.5rem; border: 1px solid var(--glass-border); border-radius: 12px;">
+                    <h3
+                        style="margin-top:0; border-bottom:1px solid var(--glass-border); padding-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+                        <span><i class="fa-solid fa-list-ul" style="margin-right:8px;"></i>Global Watch Log</span>
+                        <button id="btn-clear-history" class="icon-btn"
+                            style="position:static; font-size:0.8rem; padding:4px 8px; color:#ff4757; border-color:#ff4757;"><i
+                                class="fa-solid fa-trash"></i> Clear</button>
+                    </h3>
+                    <div style="max-height: 500px; overflow-y: auto; margin-top:1rem; padding-right:10px;"
+                        id="admin-history-grid">
+                        <!-- Injected via API -->
+                        <p style="color:var(--text-secondary);">Loading global history...</p>
                     </div>
-                    <!-- Prowlarr Results grid injected here -->
-                    <div id="sources-grid" class="sources-grid hidden"></div>
                 </div>
-            </div>
-        </div>
-    </section>
 
-    <!-- WATCH HISTORY VIEW -->
-    <section id="history-view" class="view hidden">
-        <button id="btn-back-history" class="icon-btn" style="position:absolute; top: 2rem; left: 2rem;"><i
-                class="fa-solid fa-arrow-left"></i> Back</button>
-        <div class="brand-header" style="margin-top: 2rem; margin-bottom: 3rem;">
-            <h2 class="brand-title" style="font-size: 2.5rem;">Watch History</h2>
-        </div>
-        <div class="search-container" style="max-width: 1000px; width: 90%;">
-            <div id="history-grid" class="sources-grid"
-                style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));">
-                <!-- History cards injected here -->
             </div>
-            <div id="history-loader" class="sources-loader hidden">
-                <i class="fa-solid fa-satellite-dish fa-beat"></i> Loading...
-            </div>
-            <p id="history-empty" class="hidden" style="text-align: center; color: var(--text-secondary);">No watch
-                history found.</p>
-        </div>
-    </section>
+        </section>
 
-    <!-- VIDEO PLAYER VIEW -->
-    <section id="player-view" class="view hidden">
-        <button id="btn-close-player" class="icon-btn floating-close"><i class="fa-solid fa-xmark"></i></button>
-        <div class="player-container">
-            <video id="video-element" controls controlslist="nodownload" playsinline autoplay>
-                Your browser does not support the video tag.
-            </video>
-            <div class="player-overlay" id="player-overlay">
-                <div class="buffer-spinner">
-                    <i class="fa-solid fa-circle-notch fa-spin"></i>
-                    <p>Buffering from peers...</p>
-                </div>
-            </div>
-            <!-- Custom Skip Controls -->
-            <div class="custom-controls" id="custom-controls">
-                <button class="skip-btn" id="btn-skip-back"><i class="fa-solid fa-backward-step"></i> -10s</button>
-                <button class="skip-btn" id="btn-skip-forward">+10s <i class="fa-solid fa-forward-step"></i></button>
-            </div>
-        </div>
-    </section>
-
-    <!-- ADMIN DASHBOARD VIEW -->
-    <section id="admin-view" class="view hidden">
-        <button id="btn-back-admin" class="icon-btn" style="position:absolute; top: 2rem; left: 2rem;"><i
-                class="fa-solid fa-arrow-left"></i> Back</button>
-        <div class="brand-header" style="margin-top: 2rem; margin-bottom: 2rem;">
-            <h2 class="brand-title" style="font-size: 2.5rem;"><i class="fa-solid fa-shield-halved"
-                    style="color:var(--accent); margin-right:10px;"></i>Admin Panel</h2>
-        </div>
-
-        <div class="search-container" style="max-width: 1200px; width: 95%; display:flex; gap:2rem; flex-wrap:wrap;">
-
-            <!-- Live Active Streams -->
-            <div
-                style="flex: 1; min-width: 300px; background: rgba(0,0,0,0.4); padding: 1.5rem; border: 1px solid var(--accent); border-radius: 12px;">
-                <h3 style="margin-top:0; border-bottom:1px solid var(--glass-border); padding-bottom:10px;"><i
-                        class="fa-solid fa-satellite-dish fa-beat" style="color:#ff4757; margin-right:8px;"></i>Live
-                    Streams</h3>
-                <div id="admin-live-grid" style="margin-top:1rem; display:flex; flex-direction:column; gap:10px;">
-                    <!-- Injected via socket.io -->
-                    <p style="color:var(--text-secondary);">No active streams.</p>
-                </div>
-            </div>
-
-            <!-- Global Watch History Log -->
-            <div
-                style="flex: 2; min-width: 400px; background: rgba(0,0,0,0.4); padding: 1.5rem; border: 1px solid var(--glass-border); border-radius: 12px;">
-                <h3
-                    style="margin-top:0; border-bottom:1px solid var(--glass-border); padding-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
-                    <span><i class="fa-solid fa-list-ul" style="margin-right:8px;"></i>Global Watch Log</span>
-                    <button id="btn-clear-history" class="icon-btn"
-                        style="position:static; font-size:0.8rem; padding:4px 8px; color:#ff4757; border-color:#ff4757;"><i
-                            class="fa-solid fa-trash"></i> Clear</button>
-                </h3>
-                <div style="max-height: 500px; overflow-y: auto; margin-top:1rem; padding-right:10px;"
-                    id="admin-history-grid">
-                    <!-- Injected via API -->
-                    <p style="color:var(--text-secondary);">Loading global history...</p>
-                </div>
-            </div>
-
-        </div>
-    </section>
+    </div> <!-- End Scroll Container -->
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="/app.js?v=3"></script>
+    <script src="/app.js?v=4"></script>
 </body>
 
 </html>

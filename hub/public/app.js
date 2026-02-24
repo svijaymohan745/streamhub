@@ -333,7 +333,8 @@ async function loadMovieDetails(id, mediaType = 'movie', pushHistory = true) {
             jellyfinBtn.href = "#";
             try {
                 // Pass the exact string without stripping colons
-                const jfRes = await fetch(`/api/jellyfin/check?title=${encodeURIComponent(fetchedTitle)}`);
+                // Note: encodeURIComponent encodes colons into %3A which breaks Jellyfin search natively
+                const jfRes = await fetch(`/api/jellyfin/check?title=${fetchedTitle}`);
                 const jfData = await jfRes.json();
                 if (jfData.exists && jfData.url) {
                     jellyfinBtn.href = jfData.url;

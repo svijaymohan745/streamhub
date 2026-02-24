@@ -233,12 +233,12 @@ app.get('/api/jellyfin/check', async (req, res) => {
 
     try {
         const jfUrl = (process.env.JELLYFIN_URL || 'http://192.168.2.54:1000').replace(/\/$/, '');
-        const response = await axios.get(`${jfUrl}/Items`, {
-            params: {
-                searchTerm: title,
-                IncludeItemTypes: 'Movie,Series',
-                Recursive: 'true'
-            },
+
+        // Axios params natively URL-encodes colons into %3A. Jellyfin strictly requires raw colons (e.g., '28 Years: The Movie')
+        // to execute valid DB matches. We must build the URL manually to bypass Axios encoding.
+        const queryUrl = `${jfUrl}/Items?IncludeItemTypes=Movie,Series&Recursive=true&searchTerm=${title}`;
+
+        const response = await axios.get(queryUrl, {
             headers: {
                 'X-Emby-Token': process.env.JELLYFIN_API_KEY
             }
