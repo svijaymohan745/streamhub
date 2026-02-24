@@ -50,6 +50,11 @@
 
     <!-- MAIN LANDING VIEW (Google Style Search) -->
     <main id="search-view" class="view hidden">
+        <!-- New Phase 5 Navigation Buttons -->
+        <a href="https://stream.hulksmash.ca" target="_top" class="icon-btn floating-escape" title="Full Site">
+            <i class="fa-solid fa-arrow-up-right-from-square"></i> Full Site
+        </a>
+
         <div class="brand-header">
             <img src="/HTV.png" alt="H-TV Logo" class="brand-logo">
             <h1 class="brand-title">Streamhub</h1>
@@ -70,9 +75,17 @@
                 <!-- Injected via JS -->
             </div>
         </div>
-        <button id="btn-logout" class="icon-btn floating-logout" title="Sign Out">
-            Sign Out <i class="fa-solid fa-right-from-bracket"></i>
-        </button>
+        <div class="action-buttons-group">
+            <button id="btn-admin" class="icon-btn floating-admin hidden" title="Admin Dashboard">
+                <i class="fa-solid fa-server"></i> Admin
+            </button>
+            <button id="btn-history" class="icon-btn floating-history" title="Watch History">
+                <i class="fa-solid fa-clock-rotate-left"></i> History
+            </button>
+            <button id="btn-logout" class="icon-btn floating-logout" title="Sign Out">
+                Sign Out <i class="fa-solid fa-right-from-bracket"></i>
+            </button>
+        </div>
     </main>
 
     <!-- MOVIE DETAILS & TORRENT SOURCES VIEW -->
@@ -91,6 +104,19 @@
                 </div>
                 <p id="detail-overview" class="overview"></p>
 
+                <!-- TV Show Specific UI (Hidden by default for Movies) -->
+                <div id="tv-season-section" class="tv-season-section hidden">
+                    <div class="season-header">
+                        <h3>Select Season</h3>
+                        <select id="season-selector" class="season-dropdown">
+                            <!-- Injected dynamically -->
+                        </select>
+                    </div>
+                    <div id="episodes-grid" class="episodes-grid hidden">
+                        <!-- Episode Buttons injected dynamically -->
+                    </div>
+                </div>
+
                 <div class="sources-section">
                     <h3>Select a Stream</h3>
                     <div id="sources-loader" class="sources-loader">
@@ -103,11 +129,31 @@
         </div>
     </section>
 
+    <!-- WATCH HISTORY VIEW -->
+    <section id="history-view" class="view hidden">
+        <button id="btn-back-history" class="icon-btn" style="position:absolute; top: 2rem; left: 2rem;"><i
+                class="fa-solid fa-arrow-left"></i> Back</button>
+        <div class="brand-header" style="margin-top: 2rem; margin-bottom: 3rem;">
+            <h2 class="brand-title" style="font-size: 2.5rem;">Watch History</h2>
+        </div>
+        <div class="search-container" style="max-width: 1000px; width: 90%;">
+            <div id="history-grid" class="sources-grid"
+                style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));">
+                <!-- History cards injected here -->
+            </div>
+            <div id="history-loader" class="sources-loader hidden">
+                <i class="fa-solid fa-satellite-dish fa-beat"></i> Loading...
+            </div>
+            <p id="history-empty" class="hidden" style="text-align: center; color: var(--text-secondary);">No watch
+                history found.</p>
+        </div>
+    </section>
+
     <!-- VIDEO PLAYER VIEW -->
     <section id="player-view" class="view hidden">
         <button id="btn-close-player" class="icon-btn floating-close"><i class="fa-solid fa-xmark"></i></button>
         <div class="player-container">
-            <video id="video-element" controls controlslist="nodownload">
+            <video id="video-element" controls controlslist="nodownload" playsinline autoplay>
                 Your browser does not support the video tag.
             </video>
             <div class="player-overlay" id="player-overlay">
@@ -124,6 +170,45 @@
         </div>
     </section>
 
+    <!-- ADMIN DASHBOARD VIEW -->
+    <section id="admin-view" class="view hidden">
+        <button id="btn-back-admin" class="icon-btn" style="position:absolute; top: 2rem; left: 2rem;"><i
+                class="fa-solid fa-arrow-left"></i> Back</button>
+        <div class="brand-header" style="margin-top: 2rem; margin-bottom: 2rem;">
+            <h2 class="brand-title" style="font-size: 2.5rem;"><i class="fa-solid fa-shield-halved"
+                    style="color:var(--accent); margin-right:10px;"></i>Admin Panel</h2>
+        </div>
+
+        <div class="search-container" style="max-width: 1200px; width: 95%; display:flex; gap:2rem; flex-wrap:wrap;">
+
+            <!-- Live Active Streams -->
+            <div
+                style="flex: 1; min-width: 300px; background: rgba(0,0,0,0.4); padding: 1.5rem; border: 1px solid var(--accent); border-radius: 12px;">
+                <h3 style="margin-top:0; border-bottom:1px solid var(--glass-border); padding-bottom:10px;"><i
+                        class="fa-solid fa-satellite-dish fa-beat" style="color:#ff4757; margin-right:8px;"></i>Live
+                    Streams</h3>
+                <div id="admin-live-grid" style="margin-top:1rem; display:flex; flex-direction:column; gap:10px;">
+                    <!-- Injected via socket.io -->
+                    <p style="color:var(--text-secondary);">No active streams.</p>
+                </div>
+            </div>
+
+            <!-- Global Watch History Log -->
+            <div
+                style="flex: 2; min-width: 400px; background: rgba(0,0,0,0.4); padding: 1.5rem; border: 1px solid var(--glass-border); border-radius: 12px;">
+                <h3 style="margin-top:0; border-bottom:1px solid var(--glass-border); padding-bottom:10px;"><i
+                        class="fa-solid fa-list-ul" style="margin-right:8px;"></i>Global Watch Log</h3>
+                <div style="max-height: 500px; overflow-y: auto; margin-top:1rem; padding-right:10px;"
+                    id="admin-history-grid">
+                    <!-- Injected via API -->
+                    <p style="color:var(--text-secondary);">Loading global history...</p>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <script src="/socket.io/socket.io.js"></script>
     <script src="/app.js"></script>
 </body>
 

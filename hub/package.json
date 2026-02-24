@@ -15,6 +15,8 @@
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "http-proxy-middleware": "^3.0.5",
-    "parse-torrent": "^11.0.19"
+    "parse-torrent": "^11.0.19",
+    "socket.io": "^4.8.3",
+    "sqlite3": "^5.1.7"
   }
 }

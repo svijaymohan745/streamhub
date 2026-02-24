@@ -1,8 +1,8 @@
-// DOM Elements
 const loginView = document.getElementById('login-view');
 const searchView = document.getElementById('search-view');
 const detailsView = document.getElementById('movie-details-view');
 const playerView = document.getElementById('player-view');
+const historyView = document.getElementById('history-view');
 
 const searchInput = document.getElementById('movie-search');
 const autocompleteDropdown = document.getElementById('autocomplete-results');
@@ -68,6 +68,10 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
 
         // Ensure user stays logged in for 30 days via cookies
         setCookie('jellyfinUser', data.user.Name, 30);
+        if (data.token) setCookie('jellyfinToken', data.token, 30);
+        if (data.user && data.user.Policy && data.user.Policy.IsAdministrator) {
+            setCookie('isAdmin', 'true', 30);
+        }
 
         showMainApp();
     } catch (err) {
@@ -79,11 +83,17 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
 document.getElementById('btn-logout').addEventListener('click', () => {
     // Delete cookie by expiring it immediately
     document.cookie = "jellyfinUser=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    document.cookie = "jellyfinToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    document.cookie = "isAdmin=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
     location.reload();
 });
 
 function showMainApp() {
     loginView.classList.add('hidden');
+
+    if (getCookie('isAdmin') === 'true') {
+        document.getElementById('btn-admin').classList.remove('hidden');
+    }
 
     // Load Dynamic UI Elements
     loadNetflixGrid();
@@ -95,6 +105,9 @@ function showMainApp() {
         const id = path.split('/')[2];
         history.replaceState({ view: 'details', id }, "Movie Details", path);
         loadMovieDetails(id, false);
+    } else if (path === '/history') {
+        history.replaceState({ view: 'history' }, "Watch History", "/history");
+        showHistoryView();
     } else if (path === '/play') {
         history.replaceState({ view: 'search' }, "Search", "/");
         showSearchView();
@@ -107,14 +120,25 @@ function showMainApp() {
 function showSearchView() {
     detailsView.classList.add('hidden');
     playerView.classList.add('hidden');
+    historyView.classList.add('hidden');
     searchView.classList.remove('hidden');
     searchInput.value = '';
     backdrop.style.backgroundImage = 'none';
     currentMovieId = null; // reset so revisiting details reloads
 }
 
+function showHistoryView() {
+    searchView.classList.add('hidden');
+    detailsView.classList.add('hidden');
+    playerView.classList.add('hidden');
+    historyView.classList.remove('hidden');
+    backdrop.style.backgroundImage = 'none';
+    loadWatchHistory();
+}
+
 // Global active state tracking
 let currentMovieId = null;
+let currentMediaType = 'movie'; // 'movie' or 'tv'
 
 // Handle Browser Back/Forward Buttons
 window.addEventListener('popstate', (e) => {
@@ -128,6 +152,10 @@ window.addEventListener('popstate', (e) => {
         video.load();
         playerView.classList.add('hidden');
 
+        if (typeof socket !== 'undefined' && socket) {
+            socket.emit('stop_stream');
+        }
+
         // Reset overlay for next time
         const overlay = document.getElementById('player-overlay');
         overlay.style.display = 'flex';
@@ -139,8 +167,9 @@ window.addEventListener('popstate', (e) => {
     } else if (e.state.view === 'details') {
         searchView.classList.add('hidden');
         playerView.classList.add('hidden');
+        historyView.classList.add('hidden');
         detailsView.classList.remove('hidden');
-        loadMovieDetails(e.state.id, false);
+        loadMovieDetails(e.state.id, e.state.mediaType || 'movie', false);
     } else if (e.state.view === 'player' && e.state.magnetUri) {
         startStream(e.state.magnetUri, false);
     } else if (e.state.view === 'login') {
@@ -223,26 +252,28 @@ function renderAutocomplete(results) {
         return;
     }
 
-    results.slice(0, 5).forEach(movie => {
+    results.slice(0, 5).forEach(m => {
         const item = document.createElement('div');
         item.className = 'search-item';
 
-        // TMDB Image Base URL
-        const posterUrl = movie.poster_path
-            ? `https://image.tmdb.org/t/p/w92${movie.poster_path}`
+        const posterUrl = m.poster_path
+            ? `https://image.tmdb.org/t/p/w92${m.poster_path}`
             : 'https://via.placeholder.com/92x138?text=No+Poster';
 
-        const year = movie.release_date ? movie.release_date.split('-')[0] : 'N/A';
+        const rawDate = m.release_date || m.first_air_date || '';
+        const year = rawDate ? rawDate.split('-')[0] : 'N/A';
+        const title = m.title || m.name;
+        const icon = m.media_type === 'tv' ? '<i class="fa-solid fa-tv"></i>' : '<i class="fa-solid fa-film"></i>';
 
         item.innerHTML = `
             <img src="${posterUrl}" alt="Poster">
             <div class="search-item-info">
-                <strong>${movie.title}</strong>
-                <span>${year} • <i class="fa-solid fa-star text-gold" style="color: #f1c40f; margin-right: 2px;"></i> ${movie.vote_average.toFixed(1)}</span>
+                <strong>${title}</strong>
+                <span>${icon} ${year} • <i class="fa-solid fa-star text-gold" style="color: #f1c40f; margin-right: 2px;"></i> ${m.vote_average.toFixed(1)}</span>
             </div>
         `;
 
-        item.addEventListener('click', () => loadMovieDetails(movie.id));
+        item.addEventListener('click', () => loadMovieDetails(m.id, m.media_type));
         autocompleteDropdown.appendChild(item);
     });
 
@@ -250,9 +281,10 @@ function renderAutocomplete(results) {
 }
 
 // Load Details Page
-async function loadMovieDetails(id, pushHistory = true) {
+async function loadMovieDetails(id, mediaType = 'movie', pushHistory = true) {
     if (pushHistory) {
-        history.pushState({ view: 'details', id }, "Movie Details", `/movie/${id}`);
+        // Technically URLs could be /tv/id, but /movie/id is legacy compatible in our router block
+        history.pushState({ view: 'details', id, mediaType }, "Media Details", `/${mediaType}/${id}`);
     }
 
     // Hide search view, show details view
@@ -261,28 +293,52 @@ async function loadMovieDetails(id, pushHistory = true) {
     playerView.classList.add('hidden');
     detailsView.classList.remove('hidden');
 
-    if (currentMovieId == id) return; // Already rendered this movie
+    if (currentMovieId == id && currentMediaType === mediaType) return; // Already rendered
     currentMovieId = id;
+    currentMediaType = mediaType;
 
     // Reset Details UI
     document.getElementById('sources-grid').classList.add('hidden');
     document.getElementById('sources-loader').classList.remove('hidden');
     document.getElementById('sources-grid').innerHTML = '';
 
+    const tvSection = document.getElementById('tv-season-section');
+    tvSection.classList.add('hidden');
+
     try {
-        // Fetch full TMDB info
-        const res = await fetch(`/api/movie/${id}`);
+        // Fetch full TMDB info based on media type
+        const apiBase = mediaType === 'tv' ? '/api/tv' : '/api/movie';
+        const res = await fetch(`${apiBase}/${id}`);
         const data = await res.json();
 
         // Extract title and year for Prowlarr
-        const fetchedTitle = data.title;
-        const fetchedYear = data.release_date ? data.release_date.split('-')[0] : '';
+        const fetchedTitle = data.title || data.name;
+        const fetchedYear = (data.release_date || data.first_air_date || '').split('-')[0];
 
         // Update UI
         document.getElementById('detail-title').innerText = fetchedTitle;
         document.getElementById('detail-year').innerText = fetchedYear;
         document.getElementById('detail-rating').innerHTML = `<i class="fa-solid fa-star"></i> ${data.vote_average.toFixed(1)}`;
         document.getElementById('detail-overview').innerText = data.overview;
+
+        // Check Jellyfin for deep link
+        const jellyfinBtn = document.getElementById('btn-jellyfin');
+        if (jellyfinBtn) {
+            jellyfinBtn.classList.add('hidden');
+            jellyfinBtn.href = "#";
+
+            const token = getCookie('jellyfinToken');
+            if (token) {
+                try {
+                    const jfRes = await fetch(`/api/jellyfin/check?title=${encodeURIComponent(fetchedTitle)}&token=${token}`);
+                    const jfData = await jfRes.json();
+                    if (jfData.exists) {
+                        jellyfinBtn.href = `http://192.168.2.54:1000/web/index.html#!/details?id=${jfData.id}`;
+                        jellyfinBtn.classList.remove('hidden');
+                    }
+                } catch (e) { console.error("Jellyfin check failed:", e); }
+            }
+        }
 
         if (data.poster_path) {
             document.getElementById('detail-poster').src = `https://image.tmdb.org/t/p/w500${data.poster_path}`;
@@ -293,12 +349,80 @@ async function loadMovieDetails(id, pushHistory = true) {
             backdrop.style.backgroundImage = `url(https://image.tmdb.org/t/p/original${data.backdrop_path})`;
         }
 
-        // Now Background Query Prowlarr
-        fetchSources(fetchedTitle, fetchedYear);
+        if (mediaType === 'movie') {
+            // Background Query Prowlarr instantly for Movies
+            fetchSources(fetchedTitle, fetchedYear);
+        } else {
+            // For TV Shows, populate Seasons, wait for Episode click
+            document.getElementById('sources-loader').classList.add('hidden');
+            tvSection.classList.remove('hidden');
+
+            const seasonDropdown = document.getElementById('season-selector');
+            seasonDropdown.innerHTML = '';
+
+            // Populate Dropdown
+            // Omit specials (season 0) if desired, but we'll include all valid seasons
+            data.seasons.filter(s => s.season_number > 0).forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s.season_number;
+                const dateMeta = s.air_date ? ` (${s.air_date.split('-')[0]})` : '';
+                opt.innerText = `Season ${s.season_number}${dateMeta}`;
+                seasonDropdown.appendChild(opt);
+            });
+
+            // Create listener (replace old to avoid duplicates)
+            seasonDropdown.onchange = () => {
+                loadTvEpisodes(id, seasonDropdown.value, fetchedTitle);
+            };
+
+            // Auto-load first Season selected
+            if (data.seasons.length > 0) {
+                seasonDropdown.onchange();
+            }
+        }
 
     } catch (e) {
         console.error(e);
-        alert('Failed to load movie details');
+        alert('Failed to load details');
+    }
+}
+
+async function loadTvEpisodes(tvId, seasonNumber, showTitle) {
+    const grid = document.getElementById('episodes-grid');
+    grid.classList.add('hidden');
+    grid.innerHTML = '<div style="color:var(--text-secondary); width:100%;">Loading episodes...</div>';
+    grid.classList.remove('hidden');
+
+    try {
+        const res = await fetch(`/api/tv/${tvId}/season/${seasonNumber}`);
+        const data = await res.json();
+
+        grid.innerHTML = '';
+        data.episodes.forEach(ep => {
+            const btn = document.createElement('div');
+            btn.className = 'episode-btn';
+            btn.innerText = `E${ep.episode_number}`;
+            btn.title = ep.name;
+
+            btn.onclick = () => {
+                // Remove active class from all
+                document.querySelectorAll('.episode-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                // Format query for Prowlarr: "Show Title S01E03"
+                const sString = seasonNumber.toString().padStart(2, '0');
+                const eString = ep.episode_number.toString().padStart(2, '0');
+                const queryStr = `${showTitle} S${sString}E${eString}`;
+
+                document.getElementById('sources-grid').innerHTML = '';
+                document.getElementById('sources-grid').classList.add('hidden');
+                document.getElementById('sources-loader').classList.remove('hidden');
+                fetchSources(queryStr, '');
+            };
+            grid.appendChild(btn);
+        });
+    } catch (e) {
+        console.error("Failed to load episodes details:", e);
     }
 }
 
@@ -352,14 +476,17 @@ function startStream(magnetUri, pushHistory = true) {
     }
 
     detailsView.classList.add('hidden');
+    historyView.classList.add('hidden');
     playerView.classList.remove('hidden');
+
+    // 1. SILENTLY SAVE TO WATCH HISTORY
+    saveToHistory();
 
     const video = document.getElementById('video-element');
     const overlay = document.getElementById('player-overlay');
 
-    // We get the Machine B IP from the same host, but wait, the video src needs the raw URL.
-    // The cleanest way is Machine A provides an endpoint that redirects, or returns the IP.
-    // We'll fetch the streamer IP from an endpoint we will add to the Hub quickly.
+    // Synchronously "touch" the video element to satisfy iOS Safari click-to-play rules
+    video.play().catch(() => { });
 
     overlay.style.opacity = '1';
 
@@ -376,11 +503,17 @@ function startStream(magnetUri, pushHistory = true) {
 
             // Stream via the Hub's secure Proxy endpoint to avoid HTTPS Mixed-Content blocking
             video.src = `/api/stream?magnet=${encodeURIComponent(finalMagnet)}`;
+            video.load();
             video.play().catch(e => console.error("Autoplay prevented:", e));
 
             video.onplaying = () => {
                 overlay.style.opacity = '0';
                 setTimeout(() => overlay.style.display = 'none', 500);
+
+                if (typeof socket !== 'undefined' && socket) {
+                    const tTitle = document.getElementById('detail-title').innerText;
+                    socket.emit('start_stream', { user_id: getCookie('jellyfinUser'), title: tTitle });
+                }
             };
 
             video.onwaiting = () => {
@@ -404,6 +537,97 @@ document.getElementById('btn-close-player').addEventListener('click', () => {
     history.back();
 });
 
+document.getElementById('btn-history').addEventListener('click', () => {
+    history.pushState({ view: 'history' }, "Watch History", "/history");
+    showHistoryView();
+});
+
+document.getElementById('btn-back-history').addEventListener('click', () => {
+    history.back();
+});
+
+// --- History API Logic ---
+async function saveToHistory() {
+    const username = getCookie('jellyfinUser');
+    if (!username || !currentMovieId) return;
+
+    const title = document.getElementById('detail-title').innerText;
+    const posterSrc = document.getElementById('detail-poster').src;
+    let rawPath = posterSrc;
+    if (posterSrc.includes('/w500')) rawPath = posterSrc.split('/w500')[1];
+
+    try {
+        await fetch('/api/history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: username,
+                tmdb_id: currentMovieId,
+                media_type: currentMediaType,
+                title: title,
+                poster_path: rawPath
+            })
+        });
+    } catch (e) { console.error("History save failed:", e); }
+}
+
+async function loadWatchHistory() {
+    const grid = document.getElementById('history-grid');
+    const loader = document.getElementById('history-loader');
+    const emptyState = document.getElementById('history-empty');
+
+    grid.innerHTML = '';
+    grid.classList.add('hidden');
+    emptyState.classList.add('hidden');
+    loader.classList.remove('hidden');
+
+    const username = getCookie('jellyfinUser');
+    if (!username) return;
+
+    try {
+        const res = await fetch(`/api/history/${username}`);
+        const historyData = await res.json();
+
+        loader.classList.add('hidden');
+
+        if (!historyData || historyData.length === 0) {
+            emptyState.classList.remove('hidden');
+            return;
+        }
+
+        historyData.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'source-card';
+            card.style.cursor = 'pointer';
+
+            const posterUrl = item.poster_path ? `https://image.tmdb.org/t/p/w200${item.poster_path}` : 'https://via.placeholder.com/200x300';
+            const dateObj = new Date(item.watched_at + 'Z');
+
+            card.innerHTML = `
+                <div style="position:relative; width:100%; aspect-ratio:2/3; margin-bottom: 10px; overflow:hidden; border-radius:8px;">
+                     <img src="${posterUrl}" alt="Poster" style="width: 100%; height:100%; object-fit:cover;">
+                </div>
+                <div class="source-title" style="text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${item.title}</div>
+                <div class="source-meta" style="justify-content:center; opacity:0.7;">
+                    <span>⏳ ${dateObj.toLocaleDateString()}</span>
+                </div>
+            `;
+
+            card.addEventListener('click', () => {
+                if (item.media_type === 'movie') {
+                    loadMovieDetails(item.tmdb_id);
+                }
+            });
+            grid.appendChild(card);
+        });
+
+        grid.classList.remove('hidden');
+    } catch (e) {
+        console.error("History fetch error:", e);
+        loader.innerHTML = '<span style="color: #ff6b6b;"><i class="fa-solid fa-triangle-exclamation"></i> Error loading history.</span>';
+    }
+}
+
 // Clicking outside dropdown closes it
 document.addEventListener('click', (e) => {
     if (!e.target.closest('.search-container')) {
@@ -420,4 +644,107 @@ document.getElementById('btn-skip-back').addEventListener('click', () => {
 document.getElementById('btn-skip-forward').addEventListener('click', () => {
     const video = document.getElementById('video-element');
     video.currentTime = Math.min(video.duration, video.currentTime + 10);
+});
+
+// --- ADMIN DASHBOARD LOGIC ---
+let socket = null;
+if (typeof io !== 'undefined') {
+    socket = io();
+    socket.on('active_streams', (streams) => {
+        renderAdminLiveGrid(streams);
+    });
+}
+
+function renderAdminLiveGrid(streams) {
+    const grid = document.getElementById('admin-live-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    if (!streams || streams.length === 0) {
+        grid.innerHTML = '<p style="color:var(--text-secondary);">No active streams running on the server.</p>';
+        return;
+    }
+
+    streams.forEach(s => {
+        const item = document.createElement('div');
+        item.style.background = 'rgba(255,255,255,0.05)';
+        item.style.padding = '10px';
+        item.style.borderRadius = '8px';
+        item.style.borderLeft = '4px solid #ff4757';
+
+        const minutes = Math.floor((Date.now() - s.startTime) / 60000);
+
+        item.innerHTML = `
+            <div style="font-weight:bold; color:#fff;">${s.user_id}</div>
+            <div style="font-size:0.9rem; color:#aaa;"><i class="fa-solid fa-play" style="font-size:0.7rem; margin-right:5px; color:#ff4757;"></i>${s.title}</div>
+            <div style="font-size:0.8rem; color:#666; margin-top:5px; display:flex; justify-content:space-between;">
+                <span>IP: ${s.ip.replace('::ffff:', '')}</span>
+                <span>${minutes}m ago</span>
+            </div>
+        `;
+        grid.appendChild(item);
+    });
+}
+
+function showAdminView() {
+    searchView.classList.add('hidden');
+    detailsView.classList.add('hidden');
+    playerView.classList.add('hidden');
+    historyView.classList.add('hidden');
+    document.getElementById('admin-view').classList.remove('hidden');
+    backdrop.style.backgroundImage = 'none';
+    loadAdminHistory();
+}
+
+async function loadAdminHistory() {
+    const grid = document.getElementById('admin-history-grid');
+    grid.innerHTML = '<p style="color:var(--text-secondary);">Loading global history...</p>';
+
+    try {
+        const res = await fetch('/api/admin/history');
+        const data = await res.json();
+
+        grid.innerHTML = '';
+
+        if (!data || data.length === 0) {
+            grid.innerHTML = '<p style="color:var(--text-secondary);">No global watch history recorded yet.</p>';
+            return;
+        }
+
+        data.forEach(item => {
+            const row = document.createElement('div');
+            row.style.background = 'rgba(255,255,255,0.05)';
+            row.style.padding = '10px';
+            row.style.borderRadius = '8px';
+            row.style.marginBottom = '8px';
+            row.style.display = 'flex';
+            row.style.justifyContent = 'space-between';
+            row.style.alignItems = 'center';
+
+            const dateObj = new Date(item.watched_at + 'Z');
+
+            row.innerHTML = `
+                <div>
+                   <span style="color:var(--accent); font-weight:bold; margin-right:10px;">${item.user_id}</span>
+                   <span style="color:#fff;">${item.title}</span>
+                </div>
+                <div style="font-size:0.85rem; color:#888;">
+                   ${dateObj.toLocaleString()}
+                </div>
+            `;
+            grid.appendChild(row);
+        });
+    } catch (e) {
+        console.error("Admin History Fetch Error:", e);
+        grid.innerHTML = '<span style="color: #ff6b6b;">Error loading admin history.</span>';
+    }
+}
+
+document.getElementById('btn-admin').addEventListener('click', () => {
+    history.pushState({ view: 'admin' }, "Admin Dashboard", "/admin");
+    showAdminView();
+});
+
+document.getElementById('btn-back-admin').addEventListener('click', () => {
+    history.back();
 });

@@ -223,14 +223,33 @@ body {
     letter-spacing: -2px;
 }
 
-.floating-logout {
+.action-buttons-group {
     position: fixed;
     top: 2rem;
     right: 2rem;
+    display: flex;
+    gap: 1rem;
+    z-index: 100;
+}
+
+.floating-logout,
+.floating-history {
+    position: relative !important;
+    top: auto !important;
+    right: auto !important;
     left: auto !important;
     width: max-content !important;
     border-radius: 20px;
-    /* Pill shape */
+}
+
+.floating-escape {
+    position: fixed;
+    top: 2rem;
+    left: 2rem;
+    right: auto !important;
+    width: max-content !important;
+    border-radius: 20px;
+    text-decoration: none;
 }
 
 /* Trending Pills */
@@ -447,11 +466,95 @@ body {
     color: #f1c40f;
 }
 
+.jellyfin-btn {
+    background: linear-gradient(90deg, #aa5cc3, #00a4dc);
+    color: #fff;
+    text-decoration: none;
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: inline-flex;
+    align-items: center;
+}
+
+.jellyfin-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(170, 92, 195, 0.4);
+}
+
 .overview {
     color: #c9d1d9;
     line-height: 1.6;
     margin-bottom: 2rem;
     font-size: 1.1rem;
+}
+
+/* TV Show Seasons & Episodes */
+.tv-season-section {
+    margin-bottom: 1.5rem;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.season-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.season-header h3 {
+    font-size: 1.2rem;
+    margin: 0;
+}
+
+.season-dropdown {
+    background: var(--glass-bg);
+    color: #fff;
+    border: 1px solid var(--accent);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-size: 1rem;
+    outline: none;
+    cursor: pointer;
+    font-family: 'Outfit', sans-serif;
+}
+
+.season-dropdown option {
+    background: #111;
+    color: #fff;
+}
+
+.episodes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+    gap: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+.episode-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--glass-border);
+    padding: 10px 0;
+    text-align: center;
+    border-radius: 8px;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 600;
+}
+
+.episode-btn:hover {
+    background: var(--accent);
+    transform: translateY(-2px);
+}
+
+.episode-btn.active {
+    background: var(--accent);
+    border-color: #fff;
+    box-shadow: 0 0 10px rgba(35, 134, 54, 0.5);
 }
 
 /* Prowlarr Sources Grid */

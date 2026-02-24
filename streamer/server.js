@@ -11,6 +11,23 @@ client.on('error', (err) => {
     console.error('[!] WebTorrent Client Error:', err.message);
 });
 
+// Polyfill/safety measure for Node 18+ AbortController errors in bittorrent-tracker
+process.on('uncaughtException', (err) => {
+    if (err.name === 'AbortError' || err.code === 'ABORT_ERR') {
+        // Ignore expected fetch aborts from tracker timeouts
+        return;
+    }
+    console.error('[!] Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    if (reason && (reason.name === 'AbortError' || reason.code === 'ABORT_ERR')) {
+        // Ignore expected fetch aborts from tracker timeouts
+        return;
+    }
+    console.error('[!] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 // Allow requests from the UI Hub (Machine A)
 app.use(cors());
 
@@ -46,6 +63,19 @@ app.get('/stream', (req, res) => {
 });
 
 function handleStream(torrent, req, res, magnetURI) {
+    if (!torrent.files || torrent.files.length === 0) {
+        console.error(`[!] Error: No files found for torrent: ${torrent.name || magnetURI.substring(0, 50)}`);
+
+        // Remove from tracking and destroy so it doesn't linger dead in memory
+        activeTorrents.delete(magnetURI);
+        try { if (!torrent.destroyed) torrent.destroy(); } catch (err) { }
+
+        if (!res.headersSent) {
+            res.status(500).send('Torrent metadata invalid or missing files');
+        }
+        return;
+    }
+
     if (!torrent.activeConnections) torrent.activeConnections = 0;
     torrent.activeConnections++;
     if (torrent.idleTimeout) {
@@ -59,13 +89,19 @@ function handleStream(torrent, req, res, magnetURI) {
     const file = torrent.files.reduce((a, b) => (a.length > b.length ? a : b));
     console.log(`[▶] Streaming: ${file.name} (${(file.length / 1024 / 1024 / 1024).toFixed(2)} GB)`);
 
+    let mimeType = 'video/mp4';
+    if (file.name.toLowerCase().endsWith('.mkv')) mimeType = 'video/x-matroska';
+    else if (file.name.toLowerCase().endsWith('.webm')) mimeType = 'video/webm';
+    else if (file.name.toLowerCase().endsWith('.avi')) mimeType = 'video/x-msvideo';
+
     // Handle HTTP Range Requests (essential for seeking in video players)
     const range = req.headers.range;
     if (!range) {
         // If the video player doesn't send a Range header, just send the whole file as a stream
         res.writeHead(200, {
             'Content-Length': file.length,
-            'Content-Type': 'video/mp4' // Assuming mp4 for general compatibility
+            'Content-Type': mimeType,
+            'Accept-Ranges': 'bytes'
         });
         const stream = file.createReadStream();
 
@@ -88,7 +124,7 @@ function handleStream(torrent, req, res, magnetURI) {
         'Content-Range': `bytes ${start}-${end}/${total}`,
         'Accept-Ranges': 'bytes',
         'Content-Length': chunksize,
-        'Content-Type': 'video/mp4'
+        'Content-Type': mimeType
     });
 
     const stream = file.createReadStream({ start, end });
