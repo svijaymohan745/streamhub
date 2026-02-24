@@ -341,11 +341,6 @@ app.get('/api/get-magnet', async (req, res) => {
     }
 });
 
-// Catch-all to serve the frontend SPA
-app.use((req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
 // --- API: Watch History & Admin ---
 
 // Get Global History (Admin)
@@ -391,6 +386,11 @@ app.post('/api/history', (req, res) => {
             }
         );
     });
+});
+
+// Catch-all to serve the frontend SPA
+app.use((req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
