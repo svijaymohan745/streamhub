@@ -223,11 +223,11 @@ app.post('/api/login', async (req, res) => {
 
 // --- Phase 5 API: Check if Media Exists in Jellyfin ---
 app.get('/api/jellyfin/check', async (req, res) => {
-    const { title, token } = req.query;
-    if (!title || !token) return res.json({ exists: false });
+    const { title, token, userId } = req.query;
+    if (!title || !token || !userId) return res.json({ exists: false });
 
     try {
-        const jellyfinUrl = `http://192.168.2.54:1000/Items`;
+        const jellyfinUrl = `http://192.168.2.54:1000/Users/${userId}/Items`;
         const response = await axios.get(jellyfinUrl, {
             params: {
                 searchTerm: title,

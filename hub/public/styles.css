@@ -695,6 +695,10 @@ video {
     .movie-meta {
         justify-content: center;
     }
+
+    .nav-text {
+        display: none;
+    }
 }
 
 /* Custom Video Controls */

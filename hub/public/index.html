@@ -50,10 +50,33 @@
 
     <!-- MAIN LANDING VIEW (Google Style Search) -->
     <main id="search-view" class="view hidden">
-        <!-- New Phase 5 Navigation Buttons -->
-        <a href="https://stream.hulksmash.ca" target="_top" class="icon-btn floating-escape" title="Full Site">
-            <i class="fa-solid fa-arrow-up-right-from-square"></i> Full Site
-        </a>
+        <!-- Unified Top Navigation Bar -->
+        <div class="top-nav-bar"
+            style="position: fixed; top: 1rem; left: 1rem; right: 1rem; display: flex; justify-content: space-between; align-items: flex-start; z-index: 100; pointer-events: none;">
+
+            <div style="pointer-events: auto;">
+                <a href="https://stream.hulksmash.ca" target="_top" class="icon-btn"
+                    style="position: static !important; display: inline-block; text-decoration: none;"
+                    title="Full Site">
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i> <span class="nav-text">Full Site</span>
+                </a>
+            </div>
+
+            <div
+                style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; pointer-events: auto; max-width: 70%;">
+                <button id="btn-admin" class="icon-btn hidden" title="Admin Dashboard"
+                    style="position: static !important;">
+                    <i class="fa-solid fa-server"></i> <span class="nav-text">Admin</span>
+                </button>
+                <button id="btn-history" class="icon-btn" title="Watch History" style="position: static !important;">
+                    <i class="fa-solid fa-clock-rotate-left"></i> <span class="nav-text">History</span>
+                </button>
+                <button id="btn-logout" class="icon-btn" title="Sign Out" style="position: static !important;">
+                    <span class="nav-text">Sign Out</span> <i class="fa-solid fa-right-from-bracket"></i>
+                </button>
+            </div>
+
+        </div>
 
         <div class="brand-header">
             <img src="/HTV.png" alt="H-TV Logo" class="brand-logo">
@@ -74,17 +97,6 @@
             <div id="trending-pills" class="trending-pills">
                 <!-- Injected via JS -->
             </div>
-        </div>
-        <div class="action-buttons-group">
-            <button id="btn-admin" class="icon-btn floating-admin hidden" title="Admin Dashboard">
-                <i class="fa-solid fa-server"></i> Admin
-            </button>
-            <button id="btn-history" class="icon-btn floating-history" title="Watch History">
-                <i class="fa-solid fa-clock-rotate-left"></i> History
-            </button>
-            <button id="btn-logout" class="icon-btn floating-logout" title="Sign Out">
-                Sign Out <i class="fa-solid fa-right-from-bracket"></i>
-            </button>
         </div>
     </main>
 

@@ -69,6 +69,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
         // Ensure user stays logged in for 30 days via cookies
         setCookie('jellyfinUser', data.user.Name, 30);
         if (data.token) setCookie('jellyfinToken', data.token, 30);
+        if (data.user && data.user.Id) setCookie('jellyfinUserId', data.user.Id, 30);
         if (data.user && data.user.Policy && data.user.Policy.IsAdministrator) {
             setCookie('isAdmin', 'true', 30);
         }
@@ -332,10 +333,11 @@ async function loadMovieDetails(id, mediaType = 'movie', pushHistory = true) {
             jellyfinBtn.href = "#";
 
             const token = getCookie('jellyfinToken');
-            if (token) {
+            const userId = getCookie('jellyfinUserId');
+            if (token && userId) {
                 try {
                     const cleanTitle = fetchedTitle.replace(/[:\-]/g, ' ').replace(/\s+/g, ' ').trim();
-                    const jfRes = await fetch(`/api/jellyfin/check?title=${encodeURIComponent(cleanTitle)}&token=${token}`);
+                    const jfRes = await fetch(`/api/jellyfin/check?title=${encodeURIComponent(cleanTitle)}&token=${token}&userId=${userId}`);
                     const jfData = await jfRes.json();
                     if (jfData.exists) {
                         jellyfinBtn.href = `http://192.168.2.54:1000/web/index.html#!/details?id=${jfData.id}`;
@@ -722,8 +724,8 @@ function renderAdminLiveGrid(streams) {
                     <div style="font-size:0.9rem; color:#aaa;"><i class="fa-solid fa-play" style="font-size:0.7rem; margin-right:5px; color:#ff4757;"></i>${s.title}</div>
                 </div>
                 <div style="display:flex; gap: 8px;">
-                    <button class="icon-btn" style="padding: 4px 8px; font-size:0.8rem;" onclick="window.emitAdminAction('${s.socketId}', 'pause')"><i class="fa-solid fa-pause"></i></button>
-                    <button class="icon-btn" style="padding: 4px 8px; font-size:0.8rem; border-color:#ff4757; color:#ff4757;" onclick="window.emitAdminAction('${s.socketId}', 'stop')"><i class="fa-solid fa-stop"></i></button>
+                    <button class="icon-btn" style="position: static !important; padding: 4px 8px; font-size:0.8rem;" onclick="window.emitAdminAction('${s.socketId}', 'pause')"><i class="fa-solid fa-pause"></i></button>
+                    <button class="icon-btn" style="position: static !important; padding: 4px 8px; font-size:0.8rem; border-color:#ff4757; color:#ff4757;" onclick="window.emitAdminAction('${s.socketId}', 'stop')"><i class="fa-solid fa-stop"></i></button>
                 </div>
             </div>
             
