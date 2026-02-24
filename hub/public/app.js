@@ -121,6 +121,8 @@ function showSearchView() {
     detailsView.classList.add('hidden');
     playerView.classList.add('hidden');
     historyView.classList.add('hidden');
+    const adminView = document.getElementById('admin-view');
+    if (adminView) adminView.classList.add('hidden');
     searchView.classList.remove('hidden');
     searchInput.value = '';
     backdrop.style.backgroundImage = 'none';
@@ -131,6 +133,8 @@ function showHistoryView() {
     searchView.classList.add('hidden');
     detailsView.classList.add('hidden');
     playerView.classList.add('hidden');
+    const adminView = document.getElementById('admin-view');
+    if (adminView) adminView.classList.add('hidden');
     historyView.classList.remove('hidden');
     backdrop.style.backgroundImage = 'none';
     loadWatchHistory();
@@ -330,7 +334,8 @@ async function loadMovieDetails(id, mediaType = 'movie', pushHistory = true) {
             const token = getCookie('jellyfinToken');
             if (token) {
                 try {
-                    const jfRes = await fetch(`/api/jellyfin/check?title=${encodeURIComponent(fetchedTitle)}&token=${token}`);
+                    const cleanTitle = fetchedTitle.replace(/[:\-]/g, ' ').replace(/\s+/g, ' ').trim();
+                    const jfRes = await fetch(`/api/jellyfin/check?title=${encodeURIComponent(cleanTitle)}&token=${token}`);
                     const jfData = await jfRes.json();
                     if (jfData.exists) {
                         jellyfinBtn.href = `http://192.168.2.54:1000/web/index.html#!/details?id=${jfData.id}`;
@@ -744,6 +749,17 @@ function showAdminView() {
     backdrop.style.backgroundImage = 'none';
     loadAdminHistory();
 }
+
+document.getElementById('btn-clear-history').addEventListener('click', async () => {
+    if (confirm("Are you sure you want to completely wipe the global watch history?")) {
+        try {
+            await fetch('/api/admin/history', { method: 'DELETE' });
+            loadAdminHistory();
+        } catch (e) {
+            console.error('Failed to clear history');
+        }
+    }
+});
 
 async function loadAdminHistory() {
     const grid = document.getElementById('admin-history-grid');

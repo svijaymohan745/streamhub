@@ -12,3 +12,5 @@ services:
       - PROWLARR_API_KEY=${PROWLARR_API_KEY}
       - STREAMER_URL=${STREAMER_URL}
     restart: unless-stopped
+    volumes:
+      - ./data:/usr/src/app/data

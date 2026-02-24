@@ -196,8 +196,13 @@
             <!-- Global Watch History Log -->
             <div
                 style="flex: 2; min-width: 400px; background: rgba(0,0,0,0.4); padding: 1.5rem; border: 1px solid var(--glass-border); border-radius: 12px;">
-                <h3 style="margin-top:0; border-bottom:1px solid var(--glass-border); padding-bottom:10px;"><i
-                        class="fa-solid fa-list-ul" style="margin-right:8px;"></i>Global Watch Log</h3>
+                <h3
+                    style="margin-top:0; border-bottom:1px solid var(--glass-border); padding-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+                    <span><i class="fa-solid fa-list-ul" style="margin-right:8px;"></i>Global Watch Log</span>
+                    <button id="btn-clear-history" class="icon-btn"
+                        style="position:static; font-size:0.8rem; padding:4px 8px; color:#ff4757; border-color:#ff4757;"><i
+                            class="fa-solid fa-trash"></i> Clear</button>
+                </h3>
                 <div style="max-height: 500px; overflow-y: auto; margin-top:1rem; padding-right:10px;"
                     id="admin-history-grid">
                     <!-- Injected via API -->

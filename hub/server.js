@@ -50,7 +50,12 @@ io.on('connection', (socket) => {
 });
 
 // --- Database Initialization ---
-const db = new sqlite3.Database('./history.db', (err) => {
+const fs = require('fs');
+if (!fs.existsSync('./data')) {
+    fs.mkdirSync('./data', { recursive: true });
+}
+
+const db = new sqlite3.Database('./data/history.db', (err) => {
     if (err) console.error('Database opening error: ', err);
 });
 
@@ -376,6 +381,14 @@ app.get('/api/history/:userId', (req, res) => {
             return res.status(500).json({ error: 'Database error' });
         }
         res.json(rows);
+    });
+});
+
+// Clear Global History (Admin)
+app.delete('/api/admin/history', (req, res) => {
+    db.run(`DELETE FROM history`, function (err) {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        res.json({ success: true });
     });
 });
 
