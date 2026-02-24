@@ -232,7 +232,7 @@ app.get('/api/jellyfin/check', async (req, res) => {
     }
 
     try {
-        const jfUrl = process.env.JELLYFIN_URL || 'http://192.168.2.54:1000';
+        const jfUrl = (process.env.JELLYFIN_URL || 'http://192.168.2.54:1000').replace(/\/$/, '');
         const response = await axios.get(`${jfUrl}/Items`, {
             params: {
                 searchTerm: title,
