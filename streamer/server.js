@@ -2,6 +2,9 @@ import express from 'express';
 import WebTorrent from 'webtorrent';
 import cors from 'cors';
 import path from 'path';
+import { EventEmitter } from 'events';
+
+EventEmitter.defaultMaxListeners = 50;
 
 const app = express();
 const client = new WebTorrent();

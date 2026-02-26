@@ -281,10 +281,31 @@ app.get('/api/jellyseerr/options', async (req, res) => {
             axios.get(`${baseUrl}/settings/sonarr`, { headers: { 'X-Api-Key': apiKey } }).catch(() => ({ data: [] }))
         ]);
 
+        const radarr = radarrRes.data.length > 0 ? radarrRes.data[0] : null;
+        const sonarr = sonarrRes.data.length > 0 ? sonarrRes.data[0] : null;
+
+        if (radarr) {
+            const [profiles, folders] = await Promise.all([
+                axios.get(`${baseUrl}/settings/radarr/${radarr.id}/profiles`, { headers: { 'X-Api-Key': apiKey } }).catch(() => ({ data: [] })),
+                axios.get(`${baseUrl}/settings/radarr/${radarr.id}/directories`, { headers: { 'X-Api-Key': apiKey } }).catch(() => ({ data: [] }))
+            ]);
+            radarr.profiles = profiles.data;
+            radarr.rootFolders = folders.data;
+        }
+
+        if (sonarr) {
+            const [profiles, folders] = await Promise.all([
+                axios.get(`${baseUrl}/settings/sonarr/${sonarr.id}/profiles`, { headers: { 'X-Api-Key': apiKey } }).catch(() => ({ data: [] })),
+                axios.get(`${baseUrl}/settings/sonarr/${sonarr.id}/directories`, { headers: { 'X-Api-Key': apiKey } }).catch(() => ({ data: [] }))
+            ]);
+            sonarr.profiles = profiles.data;
+            sonarr.rootFolders = folders.data;
+        }
+
         res.json({
             configured: true,
-            radarr: radarrRes.data.length > 0 ? radarrRes.data[0] : null,
-            sonarr: sonarrRes.data.length > 0 ? sonarrRes.data[0] : null
+            radarr,
+            sonarr
         });
     } catch (e) {
         console.error('Jellyseerr Options Error:', e.message);

@@ -353,9 +353,9 @@ async function loadMovieDetails(id, mediaType = 'movie', pushHistory = true) {
                     jellyfinBtn.classList.remove('hidden');
                 } else if (jellyseerrConfig && jellyseerrConfig.configured && requestBtn) {
                     // Show Jellyseerr Request Button if missing from Jellyfin
-                    requestBtn.style.background = 'var(--accent)';
+                    requestBtn.style.background = '#8b5cf6';
                     requestBtn.style.pointerEvents = 'auto';
-                    requestBtn.innerHTML = `<i class="fa-solid fa-cloud-arrow-up" style="margin-right: 12px; font-size: 1.2rem;"></i> <span id="btn-request-text">${mediaType === 'movie' ? 'Request Movie' : 'Request Show'}</span>`;
+                    requestBtn.innerHTML = `<i class="fa-solid fa-cloud-arrow-up" style="margin-right: 12px; font-size: 1.2rem;"></i> <span id="btn-request-text">${mediaType === 'movie' ? 'Request Movie to H-TV' : 'Request Show to H-TV'}</span>`;
                     requestBtn.classList.remove('hidden');
 
                     // Attach modal handler
@@ -855,8 +855,28 @@ function openRequestModal(data, type) {
     if (config) {
         // Hydrate UI dynamically from Overseerr Active Preferences payload
         serverSelect.innerHTML = `<option value="${config.id}">${config.name}</option>`;
-        profileSelect.innerHTML = `<option value="${config.activeProfileId}">${config.activeProfileName}</option>`;
-        folderSelect.innerHTML = `<option value="${config.activeDirectory}">${config.activeDirectory}</option>`;
+
+        let profilesHtml = '';
+        if (config.profiles) {
+            config.profiles.forEach(p => {
+                const isSelected = p.id === config.activeProfileId ? 'selected' : '';
+                let labelName = p.name;
+                if (isSelected) labelName += ' (Default)';
+                profilesHtml += `<option value="${p.id}" ${isSelected}>${labelName}</option>`;
+            });
+        }
+        profileSelect.innerHTML = profilesHtml || `<option value="${config.activeProfileId}">${config.activeProfileName}</option>`;
+
+        let foldersHtml = '';
+        if (config.rootFolders) {
+            config.rootFolders.forEach(f => {
+                const isSelected = f.path === config.activeDirectory ? 'selected' : '';
+                let labelName = f.path;
+                if (isSelected) labelName += ' (Default)';
+                foldersHtml += `<option value="${f.path}" ${isSelected}>${labelName}</option>`;
+            });
+        }
+        folderSelect.innerHTML = foldersHtml || `<option value="${config.activeDirectory}">${config.activeDirectory}</option>`;
     } else {
         serverSelect.innerHTML = `<option>N/A (Default)</option>`;
         profileSelect.innerHTML = `<option>N/A (Default)</option>`;
