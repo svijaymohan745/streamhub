@@ -285,21 +285,27 @@ app.get('/api/jellyseerr/options', async (req, res) => {
         const sonarr = sonarrRes.data.length > 0 ? sonarrRes.data[0] : null;
 
         if (radarr) {
-            const [profiles, folders] = await Promise.all([
-                axios.get(`${baseUrl}/settings/radarr/${radarr.id}/profiles`, { headers: { 'X-Api-Key': apiKey } }).catch(() => ({ data: [] })),
-                axios.get(`${baseUrl}/settings/radarr/${radarr.id}/directories`, { headers: { 'X-Api-Key': apiKey } }).catch(() => ({ data: [] }))
-            ]);
-            radarr.profiles = profiles.data;
-            radarr.rootFolders = folders.data;
+            try {
+                const testRes = await axios.post(`${baseUrl}/settings/radarr/test`, radarr, { headers: { 'X-Api-Key': apiKey } });
+                radarr.profiles = testRes.data.profiles || [];
+                radarr.rootFolders = testRes.data.rootFolders || [];
+            } catch (e) {
+                console.error('Failed to prefetch Radarr profiles:', e.message);
+                radarr.profiles = [];
+                radarr.rootFolders = [];
+            }
         }
 
         if (sonarr) {
-            const [profiles, folders] = await Promise.all([
-                axios.get(`${baseUrl}/settings/sonarr/${sonarr.id}/profiles`, { headers: { 'X-Api-Key': apiKey } }).catch(() => ({ data: [] })),
-                axios.get(`${baseUrl}/settings/sonarr/${sonarr.id}/directories`, { headers: { 'X-Api-Key': apiKey } }).catch(() => ({ data: [] }))
-            ]);
-            sonarr.profiles = profiles.data;
-            sonarr.rootFolders = folders.data;
+            try {
+                const testRes = await axios.post(`${baseUrl}/settings/sonarr/test`, sonarr, { headers: { 'X-Api-Key': apiKey } });
+                sonarr.profiles = testRes.data.profiles || [];
+                sonarr.rootFolders = testRes.data.rootFolders || [];
+            } catch (e) {
+                console.error('Failed to prefetch Sonarr profiles:', e.message);
+                sonarr.profiles = [];
+                sonarr.rootFolders = [];
+            }
         }
 
         res.json({

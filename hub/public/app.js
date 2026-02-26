@@ -842,7 +842,41 @@ function openRequestModal(data, type) {
     document.getElementById('request-item-title').innerText = data.title || data.name;
     document.getElementById('request-poster').src = `https://image.tmdb.org/t/p/w200${data.poster_path}`;
 
+    // Reset Drops
+    const profileSelect = document.getElementById('request-profile');
+    const folderSelect = document.getElementById('request-folder');
+    profileSelect.innerHTML = '';
+    folderSelect.innerHTML = '';
+
     const config = type === 'movie' ? jellyseerrConfig.radarr : jellyseerrConfig.sonarr;
+
+    if (config) {
+        // Hydrate UI dynamically from Overseerr Active Preferences payload
+        let profilesHtml = '';
+        if (config.profiles) {
+            config.profiles.forEach(p => {
+                const isSelected = p.id === config.activeProfileId ? 'selected' : '';
+                let labelName = p.name;
+                if (isSelected) labelName += ' (Default)';
+                profilesHtml += `<option value="${p.id}" ${isSelected}>${labelName}</option>`;
+            });
+        }
+        profileSelect.innerHTML = profilesHtml || `<option value="${config.activeProfileId}">${config.activeProfileName}</option>`;
+
+        let foldersHtml = '';
+        if (config.rootFolders) {
+            config.rootFolders.forEach(f => {
+                const isSelected = f.path === config.activeDirectory ? 'selected' : '';
+                let labelName = f.path;
+                if (isSelected) labelName += ' (Default)';
+                foldersHtml += `<option value="${f.path}" ${isSelected}>${labelName}</option>`;
+            });
+        }
+        folderSelect.innerHTML = foldersHtml || `<option value="${config.activeDirectory}">${config.activeDirectory}</option>`;
+    } else {
+        profileSelect.innerHTML = `<option>N/A (Default)</option>`;
+        folderSelect.innerHTML = `<option>N/A (Default)</option>`;
+    }
 
     document.getElementById('btn-submit-request').onclick = async () => {
         try {
@@ -857,8 +891,8 @@ function openRequestModal(data, type) {
 
             if (config) {
                 payload.serverId = config.id;
-                if (config.activeProfileId !== undefined) payload.profileId = config.activeProfileId;
-                if (config.activeDirectory !== undefined) payload.rootFolder = config.activeDirectory;
+                payload.profileId = parseInt(profileSelect.value);
+                payload.rootFolder = folderSelect.value;
             }
 
             const res = await fetch('/api/jellyseerr/request', {
