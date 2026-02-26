@@ -843,10 +843,8 @@ function openRequestModal(data, type) {
     document.getElementById('request-poster').src = `https://image.tmdb.org/t/p/w200${data.poster_path}`;
 
     // Reset Drops
-    const serverSelect = document.getElementById('request-server');
     const profileSelect = document.getElementById('request-profile');
     const folderSelect = document.getElementById('request-folder');
-    serverSelect.innerHTML = '';
     profileSelect.innerHTML = '';
     folderSelect.innerHTML = '';
 
@@ -854,8 +852,6 @@ function openRequestModal(data, type) {
 
     if (config) {
         // Hydrate UI dynamically from Overseerr Active Preferences payload
-        serverSelect.innerHTML = `<option value="${config.id}">${config.name}</option>`;
-
         let profilesHtml = '';
         if (config.profiles) {
             config.profiles.forEach(p => {
@@ -878,7 +874,6 @@ function openRequestModal(data, type) {
         }
         folderSelect.innerHTML = foldersHtml || `<option value="${config.activeDirectory}">${config.activeDirectory}</option>`;
     } else {
-        serverSelect.innerHTML = `<option>N/A (Default)</option>`;
         profileSelect.innerHTML = `<option>N/A (Default)</option>`;
         folderSelect.innerHTML = `<option>N/A (Default)</option>`;
     }
@@ -890,10 +885,11 @@ function openRequestModal(data, type) {
 
             const payload = {
                 mediaId: data.id,
-                mediaType: type
+                mediaType: type,
+                requestUser: getCookie('jellyfinUser')
             };
             if (config) {
-                payload.serverId = parseInt(serverSelect.value);
+                payload.serverId = config.id;
                 payload.profileId = parseInt(profileSelect.value);
                 payload.rootFolder = folderSelect.value;
             }
@@ -912,7 +908,7 @@ function openRequestModal(data, type) {
                 reqBtn.style.pointerEvents = 'none';
                 reqBtn.innerHTML = '<i class="fa-solid fa-check" style="margin-right: 12px; font-size: 1.2rem;"></i><span>Requested Successfully</span>';
             } else {
-                alert('Request failed. Overseerr declined interaction.');
+                alert('Request failed. ' + (result.error || 'Overseerr declined interaction.'));
             }
         } catch (e) {
             console.error(e);

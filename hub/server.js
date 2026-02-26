@@ -318,22 +318,42 @@ app.post('/api/jellyseerr/request', async (req, res) => {
 
     try {
         const baseUrl = process.env.JELLYSEERR_URL.replace(/\/$/, '') + '/api/v1';
-        const { mediaId, mediaType, serverId, profileId, rootFolder } = req.body;
+        const apiKey = process.env.JELLYSEERR_API_KEY;
+        const { mediaId, mediaType, serverId, profileId, rootFolder, requestUser } = req.body;
+
+        let userId = 1; // Default to admin
+        if (requestUser) {
+            try {
+                const reqUserLower = requestUser.toLowerCase();
+                const usersRes = await axios.get(`${baseUrl}/user`, { headers: { 'X-Api-Key': apiKey } });
+                if (usersRes.data && usersRes.data.results) {
+                    const match = usersRes.data.results.find(u =>
+                        (u.username && u.username.toLowerCase() === reqUserLower) ||
+                        (u.displayName && u.displayName.toLowerCase() === reqUserLower) ||
+                        (u.email && u.email.toLowerCase().includes(reqUserLower))
+                    );
+                    if (match) userId = match.id;
+                }
+            } catch (e) {
+                console.error('Failed to map Overseerr user:', e.message);
+            }
+        }
 
         // Overseerr dynamically merges payload objects
-        const payload = { mediaId, mediaType };
+        const payload = { mediaId, mediaType, userId };
         if (serverId !== undefined) payload.serverId = serverId;
         if (profileId !== undefined) payload.profileId = profileId;
         if (rootFolder !== undefined) payload.rootFolder = rootFolder;
 
         const response = await axios.post(`${baseUrl}/request`, payload, {
-            headers: { 'X-Api-Key': process.env.JELLYSEERR_API_KEY }
+            headers: { 'X-Api-Key': apiKey }
         });
 
         res.json({ success: true, data: response.data });
     } catch (e) {
         console.error('Jellyseerr Post Request Error:', e.response ? e.response.data : e.message);
-        res.status(500).json({ success: false, error: 'Failed to push request to Jellyseerr' });
+        const errMsg = e.response && e.response.data && e.response.data.message ? e.response.data.message : 'Failed to push request to Jellyseerr';
+        res.status(500).json({ success: false, error: errMsg });
     }
 });
 
