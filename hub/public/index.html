@@ -189,7 +189,15 @@
                 <div class="player-overlay" id="player-overlay">
                     <div class="buffer-spinner">
                         <i class="fa-solid fa-circle-notch fa-spin"></i>
-                        <p>Buffering from peers...</p>
+                        <p id="buffer-status-text">Buffering from peers...</p>
+                        <p id="buffer-percentage"
+                            style="margin-top: 5px; font-weight: bold; color: var(--accent); font-size: 1.2rem;"></p>
+                        <div style="width: 200px; height: 6px; background: rgba(255,255,255,0.2); border-radius: 3px; margin: 15px auto 0 auto; overflow: hidden; display: none;"
+                            id="buffer-bar-container">
+                            <div id="buffer-bar-fill"
+                                style="width: 0%; height: 100%; background: var(--accent); transition: width 0.3s ease; box-shadow: 0 0 10px var(--accent);">
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <!-- Custom Skip Controls -->

@@ -431,6 +431,21 @@ app.use(createProxyMiddleware({
     }
 }));
 
+// --- API: Get WebTorrent Download Status ---
+app.get('/api/status', async (req, res) => {
+    const magnetURI = req.query.magnet;
+    if (!magnetURI) return res.status(400).json({ error: 'Missing magnet URL' });
+
+    try {
+        const response = await axios.get(`${STREAMER_URL}/status`, {
+            params: { magnet: magnetURI }
+        });
+        res.json(response.data);
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to retrieve proxy status' });
+    }
+});
+
 // --- API: Securely Convert Local Prowlarr .torrent to Magnet (Bypasses VPN blocks) ---
 app.get('/api/get-magnet', async (req, res) => {
     const torrentUrl = req.query.url;

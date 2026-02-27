@@ -9,6 +9,8 @@ const autocompleteDropdown = document.getElementById('autocomplete-results');
 const spinner = document.getElementById('search-spinner');
 const backdrop = document.getElementById('backdrop');
 
+let progressInterval; // Global tracking for buffer polling
+
 // --- Authentication & Startup ---
 // Cookie Helper Functions
 function setCookie(name, value, days) {
@@ -99,6 +101,9 @@ function showMainApp() {
     // Load Dynamic UI Elements
     loadNetflixGrid();
     loadTrendingPills();
+
+    // Ensure polling is killed if leaving player
+    if (typeof progressInterval !== 'undefined' && progressInterval) clearInterval(progressInterval);
 
     // Check current URL to support direct links or reloads
     const path = window.location.pathname;
@@ -525,12 +530,46 @@ function startStream(magnetUri, pushHistory = true) {
             }
             const finalMagnet = magnetData.magnetUrl;
 
+            const startProgressPolling = () => {
+                const pctText = document.getElementById('buffer-percentage');
+                const barCont = document.getElementById('buffer-bar-container');
+                const barFill = document.getElementById('buffer-bar-fill');
+
+                pctText.innerText = '0%';
+                barFill.style.width = '0%';
+                barCont.style.display = 'block';
+
+                if (progressInterval) clearInterval(progressInterval);
+
+                progressInterval = setInterval(async () => {
+                    try {
+                        const statusRes = await fetch(`/api/status?magnet=${encodeURIComponent(finalMagnet)}`);
+                        const statusData = await statusRes.json();
+                        if (statusData && typeof statusData.progress === 'number') {
+                            const pct = (statusData.progress * 100).toFixed(1);
+                            pctText.innerText = `${pct}%`;
+                            barFill.style.width = `${pct}%`;
+
+                            // Optional: provide speed insight
+                            const speedMbps = (statusData.downloadSpeed / 1024 / 1024).toFixed(1);
+                            document.getElementById('buffer-status-text').innerText = `Buffering: ${speedMbps} MB/s (${statusData.numPeers} peers)`;
+                        }
+                    } catch (e) { /* ignore network interrupts */ }
+                }, 1000);
+            };
+
             // Stream via the Hub's secure Proxy endpoint to avoid HTTPS Mixed-Content blocking
+            startProgressPolling();
             video.src = `/api/stream?magnet=${encodeURIComponent(finalMagnet)}`;
             video.load();
             video.play().catch(e => console.error("Autoplay prevented:", e));
 
             video.onplaying = () => {
+                if (progressInterval) clearInterval(progressInterval);
+                document.getElementById('buffer-bar-container').style.display = 'none';
+                document.getElementById('buffer-percentage').innerText = '';
+                document.getElementById('buffer-status-text').innerText = 'Buffering from peers...';
+
                 overlay.style.opacity = '0';
                 setTimeout(() => overlay.style.display = 'none', 500);
 
@@ -553,7 +592,8 @@ function startStream(magnetUri, pushHistory = true) {
             video.onwaiting = () => {
                 overlay.style.display = 'flex';
                 overlay.style.opacity = '1';
-                overlay.querySelector('p').innerText = "Buffering from peers...";
+                document.getElementById('buffer-status-text').innerText = "Buffering from peers...";
+                startProgressPolling();
             };
 
             video.addEventListener('timeupdate', () => {
