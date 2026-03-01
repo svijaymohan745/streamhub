@@ -13,9 +13,12 @@ const backdrop = document.getElementById('backdrop');
 let progressInterval = null;
 let hlsInstance = null;
 let activeSessionId = null;
+let activePlaylistUrl = null;  // for seek handler to recreate hls.js
+let videoHasPlayed = false;    // guards against iOS spurious seek on src-assign
 let currentMovieId = null;
 let currentMediaType = 'movie';
 let jellyseerrConfig = null;
+
 
 // ─── Browser detection ────────────────────────────────────────────────────────
 const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
@@ -299,7 +302,20 @@ function startDirectPlay(magnet, video, overlay, statusText, pctText, barCont, b
     reportStreamStart(false, 'h264', null);
 }
 
-// ─── HLS Transcoded Play ──────────────────────────────────────────────────────
+// ─── HLS Transcoded Play ────────────────────────────────────────────────────────
+const HLS_CONFIG = {
+    enableWorker: true,
+    lowLatencyMode: false,
+    backBufferLength: 30,
+    manifestLoadingTimeOut: 65000,
+    manifestLoadingMaxRetry: 3,
+    manifestLoadingRetryDelay: 1000,
+    levelLoadingTimeOut: 65000,
+    fragLoadingTimeOut: 65000,
+    fragLoadingMaxRetry: 6,
+    fragLoadingRetryDelay: 1000,
+};
+
 async function startHLSStream(magnet, probe, video, overlay, statusText) {
     console.log(`[Player] HLS transcode — codec:${probe.codec}`);
     statusText.innerText = 'Starting transcoder...';
@@ -311,33 +327,29 @@ async function startHLSStream(magnet, probe, video, overlay, statusText) {
     if (!startRes.ok) throw new Error('Failed to start HLS transcode');
     const session = await startRes.json();
     activeSessionId = session.sessionId;
+    activePlaylistUrl = session.playlistUrl;
+    videoHasPlayed = false;
 
     statusText.innerText = 'Waiting for first segments...';
 
-    const playlistUrl = session.playlistUrl;
-
-    // The playlist endpoint long-polls (up to 30s) — we just fire the request and wait
-    // Don't set video.src until we know the playlist exists (first fetch will wait on server)
-
     if (IS_IOS || (IS_SAFARI && video.canPlayType('application/vnd.apple.mpegurl') !== '')) {
-        // Safari/iOS: native HLS player — set src directly after playlist is confirmed ready
+        // ── Safari / iOS: native HLS ─────────────────────────────────────────
         console.log('[Player] Native HLS (Safari/iOS)');
         statusText.innerText = 'Preparing stream...';
-        // Pre-fetch the playlist (triggers server long-poll — waits until first segment ready)
-        const plRes = await fetch(playlistUrl);
+        const plRes = await fetch(activePlaylistUrl);
         if (!plRes.ok) throw new Error('Transcode failed to produce segments');
 
-        // Setup overlay callbacks BEFORE setting src (fixes mobile overlay blocking player)
         setupVideoCallbacks(video, overlay, true);
 
-        video.src = playlistUrl;
+        video.src = activePlaylistUrl;
         video.load();
         video.play().catch(e => console.warn('Autoplay blocked:', e));
 
-        // Seek handler for native HLS: restart ffmpeg from the seeked position
+        // Guard: iOS fires 'seeking' when src is assigned (currentTime=0).
+        // Only trigger seek-restart AFTER the video has actually started playing.
         let seekDebounce = null;
         video.onseeking = () => {
-            if (!activeSessionId) return;
+            if (!activeSessionId || !videoHasPlayed) return;
             clearTimeout(seekDebounce);
             seekDebounce = setTimeout(async () => {
                 const seekTime = video.currentTime;
@@ -347,66 +359,45 @@ async function startHLSStream(magnet, probe, video, overlay, statusText) {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ seekTime }),
                     });
-                    // Native player will retry segments automatically after the seek
-                } catch (e) { console.warn('[Player] Seek request failed:', e.message); }
-            }, 400); // debounce 400ms to avoid mid-scrub requests
+                    // Native player retries segments automatically
+                } catch (e) { console.warn('[Player] Seek failed:', e.message); }
+            }, 500);
         };
+
     } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+        // ── hls.js (desktop Chrome / Firefox / Edge) ────────────────────────
         console.log('[Player] hls.js');
-        // Destroy existing hls instance first
-        if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
-
-        // Setup video callbacks BEFORE attaching hls.js (no cloning!)
         setupVideoCallbacks(video, overlay, true);
+        attachHlsInstance(video, overlay, statusText, activePlaylistUrl, null);
 
-        hlsInstance = new Hls({
-            enableWorker: true,
-            lowLatencyMode: false,
-            backBufferLength: 90,
-            // Retry aggressively for the first manifest (server long-polls up to 60s)
-            manifestLoadingTimeOut: 65000,
-            manifestLoadingMaxRetry: 3,
-            manifestLoadingRetryDelay: 1000,
-            // Retry for segments that haven't been transcoded yet (forward-seeking)
-            levelLoadingTimeOut: 65000,
-            fragLoadingTimeOut: 65000,
-            fragLoadingMaxRetry: 6,
-            fragLoadingRetryDelay: 1000,
-        });
-
-        hlsInstance.loadSource(playlistUrl);
-        hlsInstance.attachMedia(video);
-
-        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
-            console.log('[hls.js] Manifest parsed — starting playback');
-            statusText.innerText = 'Buffering...';
-            video.play().catch(e => console.warn('Autoplay blocked:', e));
-        });
-
-        hlsInstance.on(Hls.Events.ERROR, (event, data) => {
-            if (data.fatal) console.error('[hls.js] Fatal error:', data.type, data.details);
-        });
-
-        // Seek handler: tell server to restart ffmpeg from new position.
-        // hls.js naturally retries the segment at video.currentTime via its retry logic.
+        // Seek handler: destroy + recreate hls.js so SourceBuffer is clean (no PTS conflicts)
         let seekDebounce = null;
         video.onseeking = () => {
-            if (!activeSessionId) return;
+            if (!activeSessionId || !activePlaylistUrl || !videoHasPlayed) return;
             clearTimeout(seekDebounce);
             seekDebounce = setTimeout(async () => {
                 const seekTime = video.currentTime;
+                const sId = activeSessionId;
+                const pUrl = activePlaylistUrl;
                 console.log(`[Player] hls.js seek → ${seekTime.toFixed(1)}s`);
+                statusText.innerText = 'Seeking...';
+                overlay.style.display = 'flex'; overlay.style.opacity = '1';
+
+                // 1. Tell server to kill old ffmpeg, restart from seekTime
                 try {
-                    statusText.innerText = 'Seeking...';
-                    overlay.style.display = 'flex'; overlay.style.opacity = '1';
-                    await fetch(`/api/hls/seek/${activeSessionId}`, {
+                    await fetch(`/api/hls/seek/${sId}`, {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ seekTime }),
                     });
-                    // hls.js will naturally retry fetching the segment at currentTime
-                    // once the server restarts ffmpeg from the seeked position
-                } catch (e) { console.warn('[Player] Seek request failed:', e.message); }
-            }, 400); // debounce 400ms to avoid rapid-fire seeks
+                } catch (e) {
+                    console.warn('[Player] Seek API failed:', e.message);
+                    return;
+                }
+
+                // 2. Destroy + recreate hls.js to clear the SourceBuffer.
+                //    Without this, stale PTS timestamps in the buffer cause decode errors.
+                attachHlsInstance(video, overlay, statusText, pUrl, seekTime);
+            }, 500);
         };
 
     } else {
@@ -415,6 +406,28 @@ async function startHLSStream(magnet, probe, video, overlay, statusText) {
 
     reportStreamStart(true, probe.codec, activeSessionId);
 }
+
+// Creates (or recreates) an hls.js instance attached to `video`.
+// seekToTime: if non-null, set video.currentTime there once the manifest is parsed.
+function attachHlsInstance(video, overlay, statusText, playlistUrl, seekToTime) {
+    if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+
+    hlsInstance = new Hls(HLS_CONFIG);
+    hlsInstance.loadSource(playlistUrl);
+    hlsInstance.attachMedia(video);
+
+    hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+        console.log('[hls.js] Manifest parsed');
+        statusText.innerText = 'Buffering...';
+        if (seekToTime !== null && seekToTime > 0) video.currentTime = seekToTime;
+        video.play().catch(e => console.warn('Autoplay blocked:', e));
+    });
+
+    hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+        if (data.fatal) console.error('[hls.js] Fatal error:', data.type, data.details);
+    });
+}
+
 
 // ─── Video Callbacks (no cloning!) ───────────────────────────────────────────
 // This stores the current callbacks so they can be replaced without cloning the element
@@ -429,6 +442,7 @@ function setupVideoCallbacks(video, overlay, isTranscoding) {
     if (_videoTimeupdateHandler) video.removeEventListener('timeupdate', _videoTimeupdateHandler);
 
     _videoPlayingHandler = () => {
+        videoHasPlayed = true; // arm the seek handler once video has actually played
         overlay.style.opacity = '0';
         setTimeout(() => { overlay.style.display = 'none'; }, 500);
         document.getElementById('buffer-percentage').innerText = '';
@@ -495,6 +509,8 @@ function stopCurrentStream() {
     if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
     if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
     if (activeSessionId) { fetch(`/api/hls/stop/${activeSessionId}`, { method: 'POST' }).catch(() => { }); activeSessionId = null; }
+    activePlaylistUrl = null;
+    videoHasPlayed = false;
     const video = document.getElementById('video-element');
     video.onseeking = null; // clear seek handler
     video.pause(); video.removeAttribute('src'); video.load();
