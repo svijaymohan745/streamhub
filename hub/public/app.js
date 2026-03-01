@@ -327,9 +327,30 @@ async function startHLSStream(magnet, probe, video, overlay, statusText) {
         const plRes = await fetch(playlistUrl);
         if (!plRes.ok) throw new Error('Transcode failed to produce segments');
 
+        // Setup overlay callbacks BEFORE setting src (fixes mobile overlay blocking player)
+        setupVideoCallbacks(video, overlay, true);
+
         video.src = playlistUrl;
         video.load();
         video.play().catch(e => console.warn('Autoplay blocked:', e));
+
+        // Seek handler for native HLS: restart ffmpeg from the seeked position
+        let seekDebounce = null;
+        video.onseeking = () => {
+            if (!activeSessionId) return;
+            clearTimeout(seekDebounce);
+            seekDebounce = setTimeout(async () => {
+                const seekTime = video.currentTime;
+                console.log(`[Player] Safari seek → ${seekTime.toFixed(1)}s`);
+                try {
+                    await fetch(`/api/hls/seek/${activeSessionId}`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ seekTime }),
+                    });
+                    // Native player will retry segments automatically after the seek
+                } catch (e) { console.warn('[Player] Seek request failed:', e.message); }
+            }, 400); // debounce 400ms to avoid mid-scrub requests
+        };
     } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
         console.log('[Player] hls.js');
         // Destroy existing hls instance first
@@ -342,14 +363,15 @@ async function startHLSStream(magnet, probe, video, overlay, statusText) {
             enableWorker: true,
             lowLatencyMode: false,
             backBufferLength: 90,
-            // Retry aggressively for the first manifest (server long-polls up to 30s)
-            manifestLoadingTimeOut: 35000,
+            // Retry aggressively for the first manifest (server long-polls up to 60s)
+            manifestLoadingTimeOut: 65000,
             manifestLoadingMaxRetry: 3,
             manifestLoadingRetryDelay: 1000,
             // Retry for segments that haven't been transcoded yet (forward-seeking)
             levelLoadingTimeOut: 65000,
             fragLoadingTimeOut: 65000,
-            fragLoadingMaxRetry: 3,
+            fragLoadingMaxRetry: 6,
+            fragLoadingRetryDelay: 1000,
         });
 
         hlsInstance.loadSource(playlistUrl);
@@ -364,6 +386,30 @@ async function startHLSStream(magnet, probe, video, overlay, statusText) {
         hlsInstance.on(Hls.Events.ERROR, (event, data) => {
             if (data.fatal) console.error('[hls.js] Fatal error:', data.type, data.details);
         });
+
+        // Seek handler: restart ffmpeg from seeked position then reload hls.js
+        let seekDebounce = null;
+        video.onseeking = () => {
+            if (!activeSessionId) return;
+            clearTimeout(seekDebounce);
+            seekDebounce = setTimeout(async () => {
+                const seekTime = video.currentTime;
+                console.log(`[Player] hls.js seek → ${seekTime.toFixed(1)}s`);
+                try {
+                    statusText.innerText = 'Seeking...';
+                    overlay.style.display = 'flex'; overlay.style.opacity = '1';
+                    await fetch(`/api/hls/seek/${activeSessionId}`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ seekTime }),
+                    });
+                    // Force hls.js to reload from the new position
+                    if (hlsInstance) {
+                        hlsInstance.stopLoad();
+                        hlsInstance.startLoad(seekTime);
+                    }
+                } catch (e) { console.warn('[Player] Seek request failed:', e.message); }
+            }, 400); // debounce 400ms to avoid rapid-fire seeks
+        };
     } else {
         throw new Error('HLS not supported on this browser');
     }
@@ -451,6 +497,7 @@ function stopCurrentStream() {
     if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
     if (activeSessionId) { fetch(`/api/hls/stop/${activeSessionId}`, { method: 'POST' }).catch(() => { }); activeSessionId = null; }
     const video = document.getElementById('video-element');
+    video.onseeking = null; // clear seek handler
     video.pause(); video.removeAttribute('src'); video.load();
 }
 
