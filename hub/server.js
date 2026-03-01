@@ -322,10 +322,18 @@ app.post('/api/hls/start', async (req, res) => {
 
     const startFfmpeg = (encoder) => {
         const proc = spawn('ffmpeg', buildArgs(encoder), { stdio: ['ignore', 'pipe', 'pipe'] });
+        const stderrBuf = [];  // capture ALL stderr for error diagnosis
 
         proc.stderr.on('data', chunk => {
-            const line = chunk.toString();
-            if (line.includes('frame=')) process.stdout.write(`[ffmpeg/${sessionId.substring(0, 8)}] ${line.trim()}\n`);
+            const lines = chunk.toString().split('\n');
+            lines.forEach(line => {
+                if (!line.trim()) return;
+                stderrBuf.push(line);
+                if (stderrBuf.length > 60) stderrBuf.shift(); // rolling 60-line buffer
+                if (line.includes('frame=')) {
+                    process.stdout.write(`[ffmpeg/${sessionId.substring(0, 8)}] ${line.trim()}\n`);
+                }
+            });
         });
 
         proc.on('close', code => {
@@ -333,6 +341,11 @@ app.post('/api/hls/start', async (req, res) => {
                 // Check segments produced — any non-zero exit + no segments = fallback
                 let segs = 0;
                 try { segs = fs.readdirSync(outputDir).filter(f => f.endsWith('.ts')).length; } catch { }
+
+                // Always dump stderr on failure so we know why
+                if (segs === 0) {
+                    console.error(`[ffmpeg/${sessionId.substring(0, 8)} STDERR]\n${stderrBuf.slice(-30).join('\n')}`);
+                }
 
                 if (segs === 0 && encoder === 'h264_nvenc') {
                     console.warn(`[Hub/HLS ⚠] NVENC failed (exit ${code}, no segments) — retrying with libx264: ${sessionId}`);
