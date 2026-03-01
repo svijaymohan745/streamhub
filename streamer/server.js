@@ -32,7 +32,7 @@ process.on('unhandledRejection', (reason) => {
 // Primary download path - WebTorrent default (system temp if not set)
 const DEFAULT_DL_PATH = process.env.DEFAULT_DL_PATH || null; // e.g. C:/StreamCache
 const FALLBACK_DL_PATH = process.env.FALLBACK_DL_PATH || 'D:/TempMovies';
-const LARGE_FILE_THRESHOLD_GB = parseFloat(process.env.LARGE_FILE_THRESHOLD_GB || '4');
+const LARGE_FILE_THRESHOLD_GB = parseFloat(process.env.LARGE_FILE_THRESHOLD_GB || '20');
 
 /**
  * Get free disk space in bytes for a given path.
