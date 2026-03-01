@@ -1,4 +1,4 @@
-// ─── DOM References ────────────────────────────────────────────────────────────
+﻿// ─── DOM References ────────────────────────────────────────────────────────────
 const loginView = document.getElementById('login-view');
 const searchView = document.getElementById('search-view');
 const detailsView = document.getElementById('movie-details-view');
@@ -15,6 +15,7 @@ let hlsInstance = null;
 let activeSessionId = null;
 let activePlaylistUrl = null;  // for seek handler to recreate hls.js
 let videoHasPlayed = false;    // guards against iOS spurious seek on src-assign
+let seekLockUntil = 0;         // timestamp: ignore onseeking events until this time (breaks seek loop)
 let currentMovieId = null;
 let currentMediaType = 'movie';
 let jellyseerrConfig = null;
@@ -373,7 +374,7 @@ async function startHLSStream(magnet, probe, video, overlay, statusText) {
         // Seek handler: destroy + recreate hls.js so SourceBuffer is clean (no PTS conflicts)
         let seekDebounce = null;
         video.onseeking = () => {
-            if (!activeSessionId || !activePlaylistUrl || !videoHasPlayed) return;
+            if (!activeSessionId || !activePlaylistUrl || !videoHasPlayed || Date.now() < seekLockUntil) return;
             clearTimeout(seekDebounce);
             seekDebounce = setTimeout(async () => {
                 const seekTime = video.currentTime;
@@ -394,8 +395,11 @@ async function startHLSStream(magnet, probe, video, overlay, statusText) {
                     return;
                 }
 
-                // 2. Destroy + recreate hls.js to clear the SourceBuffer.
-                //    Without this, stale PTS timestamps in the buffer cause decode errors.
+                // 2. Lock out onseeking for 6s (prevents re-triggering feedback loop)
+                //    video.currentTime assignment inside MANIFEST_PARSED fires onseeking again
+                seekLockUntil = Date.now() + 6000;
+
+                // 3. Destroy + recreate hls.js to clear SourceBuffer (no PTS conflicts)
                 attachHlsInstance(video, overlay, statusText, pUrl, seekTime);
             }, 500);
         };
@@ -419,7 +423,11 @@ function attachHlsInstance(video, overlay, statusText, playlistUrl, seekToTime) 
     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
         console.log('[hls.js] Manifest parsed');
         statusText.innerText = 'Buffering...';
-        if (seekToTime !== null && seekToTime > 0) video.currentTime = seekToTime;
+        // Use startLoad(seekToTime) so hls.js seeks internally without setting video.currentTime
+        // (setting currentTime here fires onseeking again, creating an infinite loop)
+        if (seekToTime !== null && seekToTime > 0) {
+            hlsInstance.startLoad(seekToTime);
+        }
         video.play().catch(e => console.warn('Autoplay blocked:', e));
     });
 
@@ -511,6 +519,7 @@ function stopCurrentStream() {
     if (activeSessionId) { fetch(`/api/hls/stop/${activeSessionId}`, { method: 'POST' }).catch(() => { }); activeSessionId = null; }
     activePlaylistUrl = null;
     videoHasPlayed = false;
+    seekLockUntil = 0;
     const video = document.getElementById('video-element');
     video.onseeking = null; // clear seek handler
     video.pause(); video.removeAttribute('src'); video.load();
@@ -671,3 +680,7 @@ function openRequestModal(data, type) {
     document.getElementById('btn-cancel-request').onclick = () => modal.classList.add('hidden');
     document.getElementById('btn-close-request').onclick = () => modal.classList.add('hidden');
 }
+
+
+
+

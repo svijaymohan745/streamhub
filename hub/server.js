@@ -292,12 +292,12 @@ app.post('/api/hls/start', async (req, res) => {
     console.log('[Hub/HLS] Warming up torrent...');
     for (let attempt = 0; attempt < 2; attempt++) {
         try {
-            await axios.get(`${STREAMER_URL}/info?magnet=${encodeURIComponent(magnet)}`, { timeout: 30000 });
+            await axios.get(`${STREAMER_URL}/info?magnet=${encodeURIComponent(magnet)}`, { timeout: 10000 });
             break; // success
         } catch (e) {
             if (attempt === 0 && e.response?.status === 500) {
                 console.warn('[Hub/HLS] Warmup 500 â€” retrying once after 8s...');
-                await new Promise(r => setTimeout(r, 8000));
+                await new Promise(r => setTimeout(r, 5000));
             } else {
                 console.warn('[Hub/HLS] Warmup failed (continuing):', e.message);
                 break;
@@ -612,3 +612,4 @@ server.listen(PORT, () => {
     console.log(`ðŸŽž  HLS base: ${HLS_OUTPUT_BASE}`);
     console.log('====================================================');
 });
+
