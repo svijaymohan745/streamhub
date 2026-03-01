@@ -295,16 +295,20 @@ function startDirectPlay(magnet, video, overlay, statusText, pctText, barCont, b
     barCont.style.display = 'block';
     startProgressPolling(magnet, statusText, pctText, barFill);
 
+    // MUST register callbacks before setting src so the 'playing' event fires with listener attached
+    setupVideoCallbacks(video, overlay, false);
+
     video.src = `/api/stream?magnet=${encodeURIComponent(magnet)}`;
     video.load();
     video.play().catch(e => console.warn('Autoplay blocked:', e));
 
-    setupVideoCallbacks(video, overlay, false);
     reportStreamStart(false, 'h264', null);
 }
 
+
 // ─── HLS Transcoded Play ────────────────────────────────────────────────────────
 const HLS_CONFIG = {
+    autoStartLoad: false,
     enableWorker: true,
     lowLatencyMode: false,
     backBufferLength: 30,
@@ -423,10 +427,12 @@ function attachHlsInstance(video, overlay, statusText, playlistUrl, seekToTime) 
     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
         console.log('[hls.js] Manifest parsed');
         statusText.innerText = 'Buffering...';
-        // Use startLoad(seekToTime) so hls.js seeks internally without setting video.currentTime
-        // (setting currentTime here fires onseeking again, creating an infinite loop)
         if (seekToTime !== null && seekToTime > 0) {
-            hlsInstance.startLoad(seekToTime);
+            // seekLockUntil (set before this call) blocks any onseeking loop
+            video.currentTime = seekToTime;
+            hlsInstance.startLoad(seekToTime); // start loading from seeked position
+        } else {
+            hlsInstance.startLoad(0); // normal: start from beginning
         }
         video.play().catch(e => console.warn('Autoplay blocked:', e));
     });
@@ -680,6 +686,9 @@ function openRequestModal(data, type) {
     document.getElementById('btn-cancel-request').onclick = () => modal.classList.add('hidden');
     document.getElementById('btn-close-request').onclick = () => modal.classList.add('hidden');
 }
+
+
+
 
 
 

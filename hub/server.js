@@ -265,7 +265,7 @@ app.get('/api/probe', async (req, res) => {
     const dnInfo = parseMagnetDn(magnetURI);
     if (dnInfo) {
         // Warm up torrent in background while player prepares
-        axios.get(`${STREAMER_URL}/info?magnet=${encodeURIComponent(magnetURI)}`, { timeout: 120000 }).catch(() => { });
+        axios.get(`${STREAMER_URL}/info?magnet=${encodeURIComponent(magnetURI)}`, { timeout: 15000 }).catch(() => { });
         const canDirectPlay = determineDirectPlay(dnInfo, isSafari);
         console.log(`[Hub/probe] ${dnInfo.name} | ${isSafari ? 'Safari' : 'Desktop'} â†’ ${canDirectPlay ? 'Direct âœ“' : 'HEVC â†’ Transcode'}`);
         return res.json({ status: 'ready', canDirectPlay, codec: canDirectPlay ? 'h264' : 'hevc', container: dnInfo.extension, resolution: 'unknown', fileName: dnInfo.name, fileSize: 0 });
@@ -612,4 +612,5 @@ server.listen(PORT, () => {
     console.log(`ðŸŽž  HLS base: ${HLS_OUTPUT_BASE}`);
     console.log('====================================================');
 });
+
 
