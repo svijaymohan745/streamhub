@@ -287,7 +287,7 @@ app.post('/api/hls/start', async (req, res) => {
     const { magnet, codec, resolution } = req.body;
     if (!magnet) return res.status(400).json({ error: 'Missing magnet' });
 
-    // Warm up torrent on streamer BEFORE ffmpeg starts — ensures a valid stream on first connect
+    // Warm up torrent on streamer BEFORE ffmpeg starts
     console.log('[Hub/HLS] Warming up torrent...');
     try {
         await axios.get(`${STREAMER_URL}/info?magnet=${encodeURIComponent(magnet)}`, { timeout: 120000 });
@@ -299,71 +299,94 @@ app.post('/api/hls/start', async (req, res) => {
     const outputDir = path.join(HLS_OUTPUT_BASE, sessionId);
     const playlistPath = path.join(outputDir, 'index.m3u8');
     const rawStreamUrl = `${STREAMER_URL}/stream?magnet=${encodeURIComponent(magnet)}`;
+    const SEG_SEC = 2;
 
     fs.mkdirSync(outputDir, { recursive: true });
-    console.log(`[Hub/HLS] Session ${sessionId} | ${rawStreamUrl.substring(0, 80)}...`);
+    console.log(`[Hub/HLS] Session ${sessionId}`);
 
+    // ── Get total duration via ffprobe (reads container header only, fast) ──────
+    let totalDuration = 0;
+    try {
+        totalDuration = await new Promise((resolve) => {
+            const fp = spawn('ffprobe', [
+                '-v', 'error', '-show_entries', 'format=duration',
+                '-of', 'default=noprint_wrappers=1:nokey=1', rawStreamUrl,
+            ], { stdio: ['ignore', 'pipe', 'pipe'] });
+            let out = '';
+            fp.stdout.on('data', d => { out += d; });
+            fp.stderr.on('data', () => { });
+            fp.on('close', () => resolve(parseFloat(out.trim()) || 0));
+            fp.on('error', () => resolve(0));
+            setTimeout(() => { try { fp.kill(); } catch { } resolve(0); }, 20000);
+        });
+        console.log(`[Hub/HLS] Duration: ${totalDuration.toFixed(1)}s`);
+    } catch { }
+
+    // ── Pre-write a complete VOD playlist so player sees full duration immediately
+    const numSegments = totalDuration > 0 ? Math.ceil(totalDuration / SEG_SEC) : 0;
+    if (numSegments > 0) {
+        let m3u8 = '#EXTM3U\n#EXT-X-VERSION:3\n';
+        m3u8 += `#EXT-X-TARGETDURATION:${SEG_SEC}\n`;
+        m3u8 += '#EXT-X-PLAYLIST-TYPE:VOD\n\n';
+        for (let i = 0; i < numSegments; i++) {
+            const isLast = i === numSegments - 1;
+            const dur = isLast ? (totalDuration - (numSegments - 1) * SEG_SEC).toFixed(6) : `${SEG_SEC}.000000`;
+            m3u8 += `#EXTINF:${dur},\nseg${String(i).padStart(5, '0')}.ts\n`;
+        }
+        m3u8 += '#EXT-X-ENDLIST\n';
+        fs.writeFileSync(playlistPath, m3u8);
+        console.log(`[Hub/HLS] Pre-wrote VOD playlist: ${numSegments} segments`);
+    }
+
+    // ── ffmpeg args: use -f segment so it only writes .ts files (not playlist) ──
     const buildArgs = (encoder) => [
         '-i', rawStreamUrl,
-        '-map', '0:v:0',          // video only — skip subtitle streams
-        '-map', '0:a:0',          // first audio track only
+        '-map', '0:v:0',
+        '-map', '0:a:0',
         '-c:v', encoder,
         ...(encoder === 'h264_nvenc' ? ['-preset', 'p4', '-cq', '23'] : ['-preset', 'veryfast', '-crf', '23']),
-        '-pix_fmt', 'yuv420p',    // convert 10-bit → 8-bit (required for H.264 high profile)
+        '-pix_fmt', 'yuv420p',
         '-profile:v', 'high', '-level', '4.1',
         '-g', '48', '-sc_threshold', '0',
         '-c:a', 'aac', '-b:a', '192k', '-ac', '2',
-        '-f', 'hls',
-        '-hls_time', '2',
-        '-hls_list_size', '0',
-        '-hls_flags', 'independent_segments+append_list',
-        '-hls_segment_type', 'mpegts',
-        '-hls_playlist_type', 'event',
-        '-hls_segment_filename', path.join(outputDir, 'seg%05d.ts'),
-        playlistPath,
+        '-f', 'segment',
+        '-segment_time', `${SEG_SEC}`,
+        '-segment_list_size', '0',
+        '-segment_format', 'mpegts',
+        path.join(outputDir, 'seg%05d.ts'),
     ];
 
     const startFfmpeg = (encoder) => {
         const proc = spawn('ffmpeg', buildArgs(encoder), { stdio: ['ignore', 'pipe', 'pipe'] });
-        const stderrBuf = [];  // capture ALL stderr for error diagnosis
+        const stderrBuf = [];
 
         proc.stderr.on('data', chunk => {
             const lines = chunk.toString().split('\n');
             lines.forEach(line => {
                 if (!line.trim()) return;
                 stderrBuf.push(line);
-                if (stderrBuf.length > 60) stderrBuf.shift(); // rolling 60-line buffer
-                if (line.includes('frame=')) {
-                    process.stdout.write(`[ffmpeg/${sessionId.substring(0, 8)}] ${line.trim()}\n`);
-                }
+                if (stderrBuf.length > 60) stderrBuf.shift();
+                if (line.includes('frame=')) process.stdout.write(`[ffmpeg/${sessionId.substring(0, 8)}] ${line.trim()}\n`);
             });
         });
 
         proc.on('close', code => {
             if (code !== 0) {
-                // Check segments produced — any non-zero exit + no segments = fallback
                 let segs = 0;
                 try { segs = fs.readdirSync(outputDir).filter(f => f.endsWith('.ts')).length; } catch { }
-
-                // Always dump stderr on failure so we know why
-                if (segs === 0) {
-                    console.error(`[ffmpeg/${sessionId.substring(0, 8)} STDERR]\n${stderrBuf.slice(-30).join('\n')}`);
-                }
-
+                if (segs === 0) console.error(`[ffmpeg/${sessionId.substring(0, 8)} STDERR]\n${stderrBuf.slice(-20).join('\n')}`);
                 if (segs === 0 && encoder === 'h264_nvenc') {
-                    console.warn(`[Hub/HLS ⚠] NVENC failed (exit ${code}, no segments) — retrying with libx264: ${sessionId}`);
+                    console.warn(`[Hub/HLS ⚠] NVENC failed (exit ${code}, no segs) — retrying with libx264: ${sessionId}`);
                     const fb = startFfmpeg('libx264');
                     const s = hlsSessions.get(sessionId);
                     if (s) s.ffmpeg = fb;
                     return;
                 }
-                if (segs === 0) {
-                    console.error(`[Hub/HLS !] ffmpeg failed with no output (exit ${code}): ${sessionId}`);
-                }
+                if (segs === 0) console.error(`[Hub/HLS !] ffmpeg failed (exit ${code}): ${sessionId}`);
             } else {
-                console.log(`[Hub/HLS ✓] Transcode complete: ${sessionId}`);
                 const s = hlsSessions.get(sessionId);
                 if (s) s.status = 'complete';
+                console.log(`[Hub/HLS ✓] Done: ${sessionId}`);
             }
         });
 
@@ -376,19 +399,29 @@ app.post('/api/hls/start', async (req, res) => {
         outputDir, status: 'transcoding',
         codec: 'h264_nvenc', resolution: resolution || 'unknown',
         startTime: Date.now(), cleanupTimer: null,
+        totalDuration,
     });
 
-    res.json({ sessionId, playlistUrl: `/api/hls/${sessionId}/index.m3u8`, status: 'transcoding' });
+    res.json({ sessionId, playlistUrl: `/api/hls/${sessionId}/index.m3u8`, status: 'transcoding', duration: totalDuration });
 });
 
-// ─── HLS: Stop ────────────────────────────────────────────────────────────────
+// ─── HLS: Stop — kill ffmpeg immediately, keep segments 5 min ─────────────────
 app.post('/api/hls/stop/:sessionId', (req, res) => {
     const { sessionId } = req.params;
-    if (!hlsSessions.has(sessionId)) return res.json({ success: true });
-    console.log(`[Hub/HLS] Stop → 5-min cleanup: ${sessionId}`);
     const s = hlsSessions.get(sessionId);
-    if (s) s.status = 'stopping';
+    if (!s) return res.json({ success: true });
+
+    // Kill ffmpeg NOW — no point continuing when player is closed
+    if (s.ffmpeg) {
+        try { s.ffmpeg.kill('SIGTERM'); } catch { }
+        setTimeout(() => { try { if (s.ffmpeg) s.ffmpeg.kill('SIGKILL'); } catch { } }, 3000);
+        s.ffmpeg = null;
+        s.status = 'stopped';
+    }
+
+    // Keep transcoded segments 5 min for fast resume
     scheduleCleanup(sessionId, 5 * 60 * 1000);
+    console.log(`[Hub/HLS] Stopped + 5-min segment cache: ${sessionId}`);
     res.json({ success: true });
 });
 
