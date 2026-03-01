@@ -305,8 +305,11 @@ app.post('/api/hls/start', async (req, res) => {
 
     const buildArgs = (encoder) => [
         '-i', rawStreamUrl,
+        '-map', '0:v:0',          // video only — skip subtitle streams
+        '-map', '0:a:0',          // first audio track only
         '-c:v', encoder,
         ...(encoder === 'h264_nvenc' ? ['-preset', 'p4', '-cq', '23'] : ['-preset', 'veryfast', '-crf', '23']),
+        '-pix_fmt', 'yuv420p',    // convert 10-bit → 8-bit (required for H.264 high profile)
         '-profile:v', 'high', '-level', '4.1',
         '-g', '48', '-sc_threshold', '0',
         '-c:a', 'aac', '-b:a', '192k', '-ac', '2',
