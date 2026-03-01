@@ -15,14 +15,13 @@ const server = http.createServer(app);
 const { Server } = require('socket.io');
 const io = new Server(server, { cors: { origin: '*' } });
 
-// ─── Environment ──────────────────────────────────────────────────────────────
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const PROWLARR_URL = process.env.PROWLARR_URL;
 const PROWLARR_API_KEY = process.env.PROWLARR_API_KEY;
 const STREAMER_URL = process.env.STREAMER_URL || 'http://localhost:6987';
 const HLS_OUTPUT_BASE = process.env.HLS_OUTPUT_BASE || '/tmp/hls_sessions';
 
-// ─── HLS Session Store ────────────────────────────────────────────────────────
+// ─── HLS Sessions ─────────────────────────────────────────────────────────────
 const hlsSessions = new Map();
 
 function ensureHlsBase() {
@@ -30,21 +29,21 @@ function ensureHlsBase() {
 }
 
 function cleanupSession(sessionId) {
-    const session = hlsSessions.get(sessionId);
-    if (!session) return;
-    clearTimeout(session.cleanupTimer);
-    if (session.ffmpeg) { try { session.ffmpeg.kill('SIGKILL'); } catch (e) { } session.ffmpeg = null; }
-    try { if (fs.existsSync(session.outputDir)) fs.rmSync(session.outputDir, { recursive: true, force: true }); } catch (e) { }
+    const s = hlsSessions.get(sessionId);
+    if (!s) return;
+    clearTimeout(s.cleanupTimer);
+    if (s.ffmpeg) { try { s.ffmpeg.kill('SIGKILL'); } catch (e) { } s.ffmpeg = null; }
+    try { if (fs.existsSync(s.outputDir)) fs.rmSync(s.outputDir, { recursive: true, force: true }); } catch (e) { }
     console.log(`[🗑] HLS session cleaned: ${sessionId}`);
     hlsSessions.delete(sessionId);
 }
 
 function scheduleCleanup(sessionId, delayMs = 5 * 60 * 1000) {
-    const session = hlsSessions.get(sessionId);
-    if (!session) return;
-    clearTimeout(session.cleanupTimer);
-    session.cleanupTimer = setTimeout(() => {
-        console.log(`[⏰] 5-min cleanup fired: ${sessionId}`);
+    const s = hlsSessions.get(sessionId);
+    if (!s) return;
+    clearTimeout(s.cleanupTimer);
+    s.cleanupTimer = setTimeout(() => {
+        console.log(`[⏰] 5-min cleanup: ${sessionId}`);
         cleanupSession(sessionId);
     }, delayMs);
 }
@@ -64,10 +63,7 @@ io.on('connection', (socket) => {
     });
     socket.on('update_transcode', (data) => {
         if (activeStreams[socket.id]) {
-            activeStreams[socket.id].transcoding = data.transcoding;
-            activeStreams[socket.id].codec = data.codec;
-            activeStreams[socket.id].resolution = data.resolution;
-            activeStreams[socket.id].sessionId = data.sessionId;
+            Object.assign(activeStreams[socket.id], { transcoding: data.transcoding, codec: data.codec, resolution: data.resolution, sessionId: data.sessionId });
             io.emit('active_streams', Object.values(activeStreams));
         }
     });
@@ -116,14 +112,14 @@ app.get('/api/trending', async (req, res) => {
     try {
         const r = await axios.get('https://api.themoviedb.org/3/trending/movie/day', { params: { api_key: TMDB_API_KEY } });
         res.json(r.data.results.slice(0, 10).map(m => ({ id: m.id, title: m.title })));
-    } catch (e) { res.status(500).json({ error: 'Failed to fetch trending' }); }
+    } catch (e) { res.status(500).json({ error: 'Failed' }); }
 });
 app.get('/api/grid', async (req, res) => {
     try {
         const page = Math.floor(Math.random() * 5) + 1;
         const r = await axios.get('https://api.themoviedb.org/3/movie/popular', { params: { api_key: TMDB_API_KEY, page } });
         res.json(r.data.results.filter(m => m.poster_path).slice(0, 18).map(m => `https://image.tmdb.org/t/p/w200${m.poster_path}`));
-    } catch (e) { res.status(500).json({ error: 'Failed to fetch grid' }); }
+    } catch (e) { res.status(500).json({ error: 'Failed' }); }
 });
 
 // ─── Prowlarr ─────────────────────────────────────────────────────────────────
@@ -141,7 +137,7 @@ app.get('/api/torrents', async (req, res) => {
     } catch (e) { res.status(500).json({ error: 'Prowlarr search failed' }); }
 });
 
-// ─── Auth ────────────────────────────────────────────────────────────────────
+// ─── Auth ─────────────────────────────────────────────────────────────────────
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'Credentials required' });
@@ -153,7 +149,7 @@ app.post('/api/login', async (req, res) => {
     } catch (e) { res.status(401).json({ error: 'Invalid credentials' }); }
 });
 
-// ─── Jellyfin Check ───────────────────────────────────────────────────────────
+// ─── Jellyfin ─────────────────────────────────────────────────────────────────
 app.get('/api/jellyfin/check', async (req, res) => {
     const { title, tmdbId } = req.query;
     if (!title || !process.env.JELLYFIN_API_KEY) return res.json({ exists: false });
@@ -181,8 +177,7 @@ app.get('/api/jellyseerr/options', async (req, res) => {
             axios.get(`${base}/settings/radarr`, { headers: { 'X-Api-Key': key } }).catch(() => ({ data: [] })),
             axios.get(`${base}/settings/sonarr`, { headers: { 'X-Api-Key': key } }).catch(() => ({ data: [] })),
         ]);
-        const radarr = rr.data[0] || null;
-        const sonarr = sr.data[0] || null;
+        const radarr = rr.data[0] || null; const sonarr = sr.data[0] || null;
         if (radarr) try { const t = await axios.post(`${base}/settings/radarr/test`, radarr, { headers: { 'X-Api-Key': key } }); radarr.profiles = t.data.profiles || []; radarr.rootFolders = t.data.rootFolders || []; } catch { radarr.profiles = []; radarr.rootFolders = []; }
         if (sonarr) try { const t = await axios.post(`${base}/settings/sonarr/test`, sonarr, { headers: { 'X-Api-Key': key } }); sonarr.profiles = t.data.profiles || []; sonarr.rootFolders = t.data.rootFolders || []; } catch { sonarr.profiles = []; sonarr.rootFolders = []; }
         res.json({ configured: true, radarr, sonarr });
@@ -211,8 +206,7 @@ app.post('/api/jellyseerr/request', async (req, res) => {
         const r = await axios.post(`${base}/request`, payload, { headers: { 'X-Api-Key': key } });
         res.json({ success: true, data: r.data });
     } catch (e) {
-        const msg = e.response?.data?.message || 'Jellyseerr request failed';
-        res.status(500).json({ success: false, error: msg });
+        res.status(500).json({ success: false, error: e.response?.data?.message || 'Jellyseerr request failed' });
     }
 });
 
@@ -235,57 +229,57 @@ app.get('/api/get-magnet', async (req, res) => {
     }
 });
 
-// ─── Probe: detect codec/container to decide direct play vs transcode ─────────
+// ─── Probe Helpers ─────────────────────────────────────────────────────────────
+function parseMagnetDn(magnetURI) {
+    try {
+        const params = new URLSearchParams(magnetURI.replace(/^magnet:\?/i, ''));
+        const dn = params.get('dn');
+        if (dn) {
+            const name = decodeURIComponent(dn).trim();
+            return { name, extension: name.split('.').pop().toLowerCase() };
+        }
+    } catch (e) { }
+    return null;
+}
+
+function determineDirectPlay(fileInfo, isSafari) {
+    const name = (fileInfo.name || '').toLowerCase();
+    const ext = (fileInfo.extension || '').toLowerCase();
+    // HEVC/H.265 cannot be decoded natively by most browsers
+    const isHEVC = /\bx265\b|\bhevc\b|\bh\.?265\b/.test(name);
+    if (isSafari) {
+        // Safari/iOS: only H.264 in MP4
+        return (ext === 'mp4' || ext === 'm4v') && !isHEVC;
+    }
+    // Desktop Chrome/Firefox/Edge: everything except HEVC direct-plays fine
+    return !isHEVC;
+}
+
+// ─── Probe endpoint — instant, no ffprobe ─────────────────────────────────────
 app.get('/api/probe', async (req, res) => {
     const magnetURI = req.query.magnet;
-    const isSafari = req.query.safari === '1'; // sent by frontend
+    const isSafari = req.query.safari === '1';
     if (!magnetURI) return res.status(400).json({ error: 'Missing magnet' });
 
-    let fileInfo;
+    // Fast path: parse filename from magnet dn= (zero network calls, instant)
+    const dnInfo = parseMagnetDn(magnetURI);
+    if (dnInfo) {
+        // Warm up torrent in background while player prepares
+        axios.get(`${STREAMER_URL}/info?magnet=${encodeURIComponent(magnetURI)}`, { timeout: 120000 }).catch(() => { });
+        const canDirectPlay = determineDirectPlay(dnInfo, isSafari);
+        console.log(`[Hub/probe] ${dnInfo.name} | ${isSafari ? 'Safari' : 'Desktop'} → ${canDirectPlay ? 'Direct ✓' : 'HEVC → Transcode'}`);
+        return res.json({ status: 'ready', canDirectPlay, codec: canDirectPlay ? 'h264' : 'hevc', container: dnInfo.extension, resolution: 'unknown', fileName: dnInfo.name, fileSize: 0 });
+    }
+
+    // Slow path: no dn= in magnet — ask streamer for filename
     try {
-        fileInfo = (await axios.get(`${STREAMER_URL}/info?magnet=${encodeURIComponent(magnetURI)}`, { timeout: 60000 })).data;
+        const fileInfo = (await axios.get(`${STREAMER_URL}/info?magnet=${encodeURIComponent(magnetURI)}`, { timeout: 60000 })).data;
+        const canDirectPlay = determineDirectPlay(fileInfo, isSafari);
+        console.log(`[Hub/probe] ${fileInfo.name} | ${isSafari ? 'Safari' : 'Desktop'} → ${canDirectPlay ? 'Direct ✓' : 'Transcode'}`);
+        return res.json({ status: 'ready', canDirectPlay, codec: canDirectPlay ? 'h264' : 'hevc', container: fileInfo.extension, resolution: 'unknown', fileName: fileInfo.name, fileSize: fileInfo.size });
     } catch (e) {
         return res.json({ status: 'pending', message: 'Fetching torrent metadata...' });
     }
-
-    const ext = fileInfo.extension || '';
-    const rawStreamUrl = `${STREAMER_URL}/stream?magnet=${encodeURIComponent(magnetURI)}`;
-
-    return new Promise((resolve) => {
-        const ffprobe = spawn('ffprobe', ['-v', 'quiet', '-print_format', 'json', '-show_streams', '-show_format', rawStreamUrl]);
-        let output = '';
-        ffprobe.stdout.on('data', chunk => { output += chunk.toString(); });
-
-        ffprobe.on('close', () => {
-            let codec = 'unknown', resolution = 'unknown', container = ext;
-            try {
-                const probe = JSON.parse(output);
-                const vs = probe.streams?.find(s => s.codec_type === 'video');
-                if (vs) { codec = vs.codec_name || 'unknown'; resolution = `${vs.width}x${vs.height}`; }
-                if (probe.format?.format_name) container = probe.format.format_name.split(',')[0];
-            } catch { }
-
-            const isH264 = codec === 'h264' || codec === 'avc1';
-            const isVP = codec === 'vp9' || codec === 'vp8';
-            const isAV1 = codec === 'av1';
-            const isMp4 = ['mov', 'mp4', 'mp4a', 'm4v'].includes(container) || ext === 'mp4' || ext === 'm4v';
-
-            // Safari/iOS: only H.264+MP4 can direct play natively
-            // Desktop Chrome/Firefox/Edge: H.264 (any container), VP8/VP9, AV1 all work
-            const canDirectPlay = isSafari ? (isH264 && isMp4) : (isH264 || isVP || isAV1);
-
-            console.log(`[Hub/probe] ${fileInfo.name} | codec:${codec} container:${container} safari:${isSafari} → ${canDirectPlay ? 'Direct Play ✓' : 'Transcode'}`);
-            res.json({ status: 'ready', canDirectPlay, codec, container, resolution, fileName: fileInfo.name, fileSize: fileInfo.size });
-            resolve();
-        });
-
-        ffprobe.on('error', () => {
-            // ffprobe failed — safe default: direct play on desktop, transcode on Safari
-            console.warn('[Hub/probe] ffprobe unavailable — using safe default');
-            res.json({ status: 'error', canDirectPlay: !isSafari, codec: 'unknown', container: ext, resolution: 'unknown', fileName: fileInfo.name, fileSize: fileInfo.size });
-            resolve();
-        });
-    });
 });
 
 // ─── HLS: Start transcode session ─────────────────────────────────────────────
@@ -293,13 +287,21 @@ app.post('/api/hls/start', async (req, res) => {
     const { magnet, codec, resolution } = req.body;
     if (!magnet) return res.status(400).json({ error: 'Missing magnet' });
 
+    // Warm up torrent on streamer BEFORE ffmpeg starts — ensures a valid stream on first connect
+    console.log('[Hub/HLS] Warming up torrent...');
+    try {
+        await axios.get(`${STREAMER_URL}/info?magnet=${encodeURIComponent(magnet)}`, { timeout: 120000 });
+    } catch (e) {
+        console.warn('[Hub/HLS] Torrent warmup failed (continuing):', e.message);
+    }
+
     const sessionId = uuidv4();
     const outputDir = path.join(HLS_OUTPUT_BASE, sessionId);
     const playlistPath = path.join(outputDir, 'index.m3u8');
     const rawStreamUrl = `${STREAMER_URL}/stream?magnet=${encodeURIComponent(magnet)}`;
 
     fs.mkdirSync(outputDir, { recursive: true });
-    console.log(`[Hub/HLS] Session ${sessionId} | source: ${rawStreamUrl}`);
+    console.log(`[Hub/HLS] Session ${sessionId} | ${rawStreamUrl.substring(0, 80)}...`);
 
     const buildArgs = (encoder) => [
         '-i', rawStreamUrl,
@@ -309,41 +311,47 @@ app.post('/api/hls/start', async (req, res) => {
         '-g', '48', '-sc_threshold', '0',
         '-c:a', 'aac', '-b:a', '192k', '-ac', '2',
         '-f', 'hls',
-        '-hls_time', '2',               // 2-second segments → faster first play
-        '-hls_list_size', '0',           // keep ALL segments for seeking
+        '-hls_time', '2',
+        '-hls_list_size', '0',
         '-hls_flags', 'independent_segments+append_list',
         '-hls_segment_type', 'mpegts',
-        '-hls_playlist_type', 'event',   // grows live; ENDLIST added when done
+        '-hls_playlist_type', 'event',
         '-hls_segment_filename', path.join(outputDir, 'seg%05d.ts'),
         playlistPath,
     ];
 
     const startFfmpeg = (encoder) => {
         const proc = spawn('ffmpeg', buildArgs(encoder), { stdio: ['ignore', 'pipe', 'pipe'] });
-        let nvencFailed = false;
 
         proc.stderr.on('data', chunk => {
             const line = chunk.toString();
-            if (line.includes('No NVENC capable devices found') || line.includes('Cannot load nvcuda')) nvencFailed = true;
             if (line.includes('frame=')) process.stdout.write(`[ffmpeg/${sessionId.substring(0, 8)}] ${line.trim()}\n`);
         });
 
         proc.on('close', code => {
-            if (nvencFailed && encoder === 'h264_nvenc') {
-                console.warn(`[Hub/HLS ⚠] NVENC unavailable — falling back to libx264: ${sessionId}`);
-                const fb = startFfmpeg('libx264');
-                const s = hlsSessions.get(sessionId);
-                if (s) s.ffmpeg = fb;
-            } else if (code === 0) {
+            if (code !== 0) {
+                // Check segments produced — any non-zero exit + no segments = fallback
+                let segs = 0;
+                try { segs = fs.readdirSync(outputDir).filter(f => f.endsWith('.ts')).length; } catch { }
+
+                if (segs === 0 && encoder === 'h264_nvenc') {
+                    console.warn(`[Hub/HLS ⚠] NVENC failed (exit ${code}, no segments) — retrying with libx264: ${sessionId}`);
+                    const fb = startFfmpeg('libx264');
+                    const s = hlsSessions.get(sessionId);
+                    if (s) s.ffmpeg = fb;
+                    return;
+                }
+                if (segs === 0) {
+                    console.error(`[Hub/HLS !] ffmpeg failed with no output (exit ${code}): ${sessionId}`);
+                }
+            } else {
                 console.log(`[Hub/HLS ✓] Transcode complete: ${sessionId}`);
                 const s = hlsSessions.get(sessionId);
                 if (s) s.status = 'complete';
-            } else if (code !== null) {
-                console.error(`[Hub/HLS !] ffmpeg exited ${code}: ${sessionId}`);
             }
         });
 
-        proc.on('error', err => { console.error(`[Hub/HLS !] spawn error: ${err.message}`); cleanupSession(sessionId); });
+        proc.on('error', err => { console.error(`[Hub/HLS !] spawn: ${err.message}`); cleanupSession(sessionId); });
         return proc;
     };
 
@@ -354,29 +362,27 @@ app.post('/api/hls/start', async (req, res) => {
         startTime: Date.now(), cleanupTimer: null,
     });
 
-    // Respond immediately — playlist endpoint long-polls until first segments exist
     res.json({ sessionId, playlistUrl: `/api/hls/${sessionId}/index.m3u8`, status: 'transcoding' });
 });
 
-// ─── HLS: Stop / schedule cleanup ─────────────────────────────────────────────
+// ─── HLS: Stop ────────────────────────────────────────────────────────────────
 app.post('/api/hls/stop/:sessionId', (req, res) => {
     const { sessionId } = req.params;
     if (!hlsSessions.has(sessionId)) return res.json({ success: true });
-    console.log(`[Hub/HLS] Stop → scheduling 5-min cleanup: ${sessionId}`);
+    console.log(`[Hub/HLS] Stop → 5-min cleanup: ${sessionId}`);
     const s = hlsSessions.get(sessionId);
     if (s) s.status = 'stopping';
     scheduleCleanup(sessionId, 5 * 60 * 1000);
     res.json({ success: true });
 });
 
-// ─── HLS: Serve playlist (long-polls until first segment is ready) ─────────────
+// ─── HLS: Serve playlist (long-polls up to 60s for first segment) ─────────────
 app.get('/api/hls/:sessionId/index.m3u8', async (req, res) => {
     const { sessionId } = req.params;
     const filePath = path.join(HLS_OUTPUT_BASE, sessionId, 'index.m3u8');
     const dir = path.join(HLS_OUTPUT_BASE, sessionId);
 
-    // Wait up to 30s for at least one .ts segment to exist
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 60; i++) {
         if (fs.existsSync(filePath)) {
             try {
                 const segs = fs.readdirSync(dir).filter(f => f.endsWith('.ts'));
@@ -392,14 +398,13 @@ app.get('/api/hls/:sessionId/index.m3u8', async (req, res) => {
     res.sendFile(filePath);
 });
 
-// ─── HLS: Serve segments (long-polls — handles seeking forward into unbuilt segs)
+// ─── HLS: Serve segments (long-poll handles forward seeking) ──────────────────
 app.get('/api/hls/:sessionId/:segment', async (req, res) => {
     const { sessionId, segment } = req.params;
     if (!segment.endsWith('.ts')) return res.status(400).send('Invalid segment type');
 
     const filePath = path.join(HLS_OUTPUT_BASE, sessionId, segment);
 
-    // Wait up to 60s for segment to be transcoded (handles seeking ahead)
     for (let i = 0; i < 60; i++) {
         if (fs.existsSync(filePath)) break;
         await new Promise(r => setTimeout(r, 1000));
@@ -420,7 +425,7 @@ app.get('/api/hls/status/:sessionId', (req, res) => {
     res.json({ status: s.status, codec: s.codec, resolution: s.resolution, segmentsReady: segs, elapsed: Math.round((Date.now() - s.startTime) / 1000) });
 });
 
-// ─── Raw stream proxy (direct play) ──────────────────────────────────────────
+// ─── Raw stream proxy ─────────────────────────────────────────────────────────
 app.use(createProxyMiddleware({
     target: STREAMER_URL, changeOrigin: true, proxyTimeout: 0, timeout: 0,
     pathFilter: '/api/stream',
@@ -428,7 +433,7 @@ app.use(createProxyMiddleware({
     on: { proxyRes(proxyRes) { proxyRes.headers['Access-Control-Allow-Origin'] = '*'; } },
 }));
 
-// ─── Watch History ────────────────────────────────────────────────────────────
+// ─── History ──────────────────────────────────────────────────────────────────
 app.get('/api/admin/history', (req, res) => {
     db.all('SELECT * FROM history ORDER BY watched_at DESC LIMIT 200', [], (err, rows) => { if (err) return res.status(500).json({ error: 'DB error' }); res.json(rows); });
 });
@@ -443,10 +448,9 @@ app.post('/api/history', (req, res) => {
     if (!user_id || !tmdb_id || !title || !media_type) return res.status(400).json({ error: 'Missing fields' });
     db.serialize(() => {
         db.run('DELETE FROM history WHERE user_id = ? AND tmdb_id = ?', [user_id, tmdb_id]);
-        db.run('INSERT INTO history (user_id, tmdb_id, media_type, title, poster_path) VALUES (?, ?, ?, ?, ?)', [user_id, tmdb_id, media_type, title, poster_path], function (err) {
-            if (err) return res.status(500).json({ error: 'DB error' });
-            res.json({ success: true, id: this.lastID });
-        });
+        db.run('INSERT INTO history (user_id, tmdb_id, media_type, title, poster_path) VALUES (?, ?, ?, ?, ?)',
+            [user_id, tmdb_id, media_type, title, poster_path],
+            function (err) { if (err) return res.status(500).json({ error: 'DB error' }); res.json({ success: true, id: this.lastID }); });
     });
 });
 
@@ -458,7 +462,6 @@ app.get('/api/status', async (req, res) => {
     catch { res.status(500).json({ error: 'Status fetch failed' }); }
 });
 
-// SPA catch-all
 app.use((req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 ensureHlsBase();
