@@ -7,7 +7,7 @@
     <title>Streamhub - HTV</title>
     <!-- Google Fonts: Outfit for modern, premium look -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/styles.css?v=7">
+    <link rel="stylesheet" href="/styles.css?v=8">
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="/favicon.png">
     <!-- Font Awesome for sleek icons -->
@@ -198,6 +198,12 @@
                                 style="width: 0%; height: 100%; background: var(--accent); transition: width 0.3s ease; box-shadow: 0 0 10px var(--accent);">
                             </div>
                         </div>
+                        <!-- Transcoding Badge -->
+                        <div id="transcode-badge"
+                            style="display:none; margin-top: 16px; background: rgba(255,71,87,0.2); border: 1px solid #ff4757; border-radius: 20px; padding: 4px 14px; font-size: 0.8rem; color: #ff6b78; letter-spacing: 0.04em;">
+                            <i class="fa-solid fa-microchip" style="margin-right:6px;"></i>
+                            <span id="transcode-badge-text">Transcoding via NVENC</span>
+                        </div>
                     </div>
                 </div>
                 <!-- Custom Skip Controls -->
@@ -292,7 +298,9 @@
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="/app.js?v=7"></script>
+    <!-- hls.js for HLS playback (transcoded streams & iOS Safari) -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.9/dist/hls.min.js"></script>
+    <script src="/app.js?v=8"></script>
 </body>
 
 </html>

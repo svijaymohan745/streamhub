@@ -1,16 +1,20 @@
-FROM node:20-alpine
+FROM node:20-bookworm-slim
+
+# Install ffmpeg (includes ffprobe) with NVENC support via apt
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy package files and install production dependencies
+# Install dependencies
 COPY package*.json ./
 RUN npm install --only=production
 
 # Copy application files
 COPY . .
 
-# Expose the API and UI port
+# Expose web port
 EXPOSE 3000
 
-# Start the application
 CMD ["node", "server.js"]

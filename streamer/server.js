@@ -1,12 +1,16 @@
 import express from 'express';
 import WebTorrent from 'webtorrent';
 import cors from 'cors';
+import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 import { EventEmitter } from 'events';
 
 EventEmitter.defaultMaxListeners = 50;
 
 const app = express();
+app.use(cors());
+
 const client = new WebTorrent();
 
 // Prevent unhandled errors from crashing the Node process
@@ -14,51 +18,92 @@ client.on('error', (err) => {
     console.error('[!] WebTorrent Client Error:', err.message);
 });
 
-// Polyfill/safety measure for Node 18+ AbortController errors in bittorrent-tracker
 process.on('uncaughtException', (err) => {
-    if (err.name === 'AbortError' || err.code === 'ABORT_ERR') {
-        // Ignore expected fetch aborts from tracker timeouts
-        return;
-    }
+    if (err.name === 'AbortError' || err.code === 'ABORT_ERR') return;
     console.error('[!] Uncaught Exception:', err);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-    if (reason && (reason.name === 'AbortError' || reason.code === 'ABORT_ERR')) {
-        // Ignore expected fetch aborts from tracker timeouts
-        return;
-    }
-    console.error('[!] Unhandled Rejection at:', promise, 'reason:', reason);
+process.on('unhandledRejection', (reason) => {
+    if (reason && (reason.name === 'AbortError' || reason.code === 'ABORT_ERR')) return;
+    console.error('[!] Unhandled Rejection:', reason);
 });
 
-// Allow requests from the UI Hub (Machine A)
-app.use(cors());
+// --- Storage Configuration ---
+// Primary download path - WebTorrent default (system temp if not set)
+const DEFAULT_DL_PATH = process.env.DEFAULT_DL_PATH || null; // e.g. C:/StreamCache
+const FALLBACK_DL_PATH = process.env.FALLBACK_DL_PATH || 'D:/TempMovies';
+const LARGE_FILE_THRESHOLD_GB = parseFloat(process.env.LARGE_FILE_THRESHOLD_GB || '4');
 
-// A map to keep track of active torrents we are seeding/streaming
-const activeTorrents = new Map();
+/**
+ * Get free disk space in bytes for a given path.
+ * Uses Windows `dir` command for cross-platform simplicity here.
+ */
+function getDiskFreeBytes(drivePath) {
+    try {
+        // Use wmic on Windows to get free space
+        const drive = path.parse(drivePath).root.replace(/\\/g, '');
+        const result = execSync(`wmic logicaldisk where "DeviceID='${drive}'" get FreeSpace /value`, { encoding: 'utf8' });
+        const match = result.match(/FreeSpace=(\d+)/);
+        if (match) return parseInt(match[1], 10);
+    } catch (e) {
+        console.warn(`[!] Could not determine free space for ${drivePath}:`, e.message);
+    }
+    return Infinity; // If we can't check, assume plenty of space
+}
 
-app.get('/stream', (req, res) => {
-    let magnetURI = req.query.magnet;
+/**
+ * Pick the best download path given the expected file size.
+ */
+function pickDownloadPath(fileSizeBytes) {
+    if (!DEFAULT_DL_PATH && !FALLBACK_DL_PATH) return undefined; // Let WebTorrent use its default
 
-    if (!magnetURI) {
-        return res.status(400).send('Missing "magnet" query parameter.');
+    const thresholdBytes = LARGE_FILE_THRESHOLD_GB * 1024 * 1024 * 1024;
+    const primaryPath = DEFAULT_DL_PATH;
+
+    if (primaryPath && fileSizeBytes <= thresholdBytes) {
+        // File is not huge — use primary path
+        const freeBytes = getDiskFreeBytes(primaryPath);
+        if (freeBytes > fileSizeBytes * 1.1) { // 10% margin
+            console.log(`[📁] Using primary path: ${primaryPath}`);
+            return primaryPath;
+        }
     }
 
-    // Add torrent to WebTorrent client (or get it if already downloading)
+    // Fallback to D:/TempMovies for large files or if primary is full
+    if (FALLBACK_DL_PATH) {
+        console.log(`[📁] Using fallback path: ${FALLBACK_DL_PATH}`);
+        if (!fs.existsSync(FALLBACK_DL_PATH)) {
+            fs.mkdirSync(FALLBACK_DL_PATH, { recursive: true });
+        }
+        return FALLBACK_DL_PATH;
+    }
+
+    return undefined;
+}
+
+// --- Active Torrents Map ---
+const activeTorrents = new Map(); // magnetURI -> torrent instance
+
+// --- /stream endpoint ---
+app.get('/stream', (req, res) => {
+    const magnetURI = req.query.magnet;
+    if (!magnetURI) return res.status(400).send('Missing "magnet" query parameter.');
+
     let torrent = activeTorrents.get(magnetURI);
 
     if (torrent) {
         if (torrent.ready) {
             handleStream(torrent, req, res, magnetURI);
         } else {
-            // Because we stored the original instance in activeTorrents, .on will work
-            torrent.on('ready', () => handleStream(torrent, req, res, magnetURI));
+            torrent.once('ready', () => handleStream(torrent, req, res, magnetURI));
         }
     } else {
         console.log(`[+] Adding new torrent: ${magnetURI.substring(0, 60)}...`);
-        client.add(magnetURI, {
-            // We can specify a download path if needed, defaulting to memory/temp for now
-        }, (newTorrent) => {
+        // We don't know file size yet at add time, so use fallback path if default defined
+        const dlPath = DEFAULT_DL_PATH || FALLBACK_DL_PATH || undefined;
+        const addOpts = dlPath ? { path: dlPath } : {};
+
+        client.add(magnetURI, addOpts, (newTorrent) => {
             activeTorrents.set(magnetURI, newTorrent);
             handleStream(newTorrent, req, res, magnetURI);
         });
@@ -67,15 +112,10 @@ app.get('/stream', (req, res) => {
 
 function handleStream(torrent, req, res, magnetURI) {
     if (!torrent.files || torrent.files.length === 0) {
-        console.error(`[!] Error: No files found for torrent: ${torrent.name || magnetURI.substring(0, 50)}`);
-
-        // Remove from tracking and destroy so it doesn't linger dead in memory
+        console.error(`[!] No files found for torrent: ${torrent.name || 'unknown'}`);
         activeTorrents.delete(magnetURI);
-        try { if (!torrent.destroyed) torrent.destroy(); } catch (err) { }
-
-        if (!res.headersSent) {
-            res.status(500).send('Torrent metadata invalid or missing files');
-        }
+        try { if (!torrent.destroyed) torrent.destroy(); } catch (e) { }
+        if (!res.headersSent) res.status(500).send('Torrent metadata invalid or missing files');
         return;
     }
 
@@ -86,95 +126,77 @@ function handleStream(torrent, req, res, magnetURI) {
         torrent.idleTimeout = null;
     }
 
-    console.log(`[✓] Torrent Ready: ${torrent.name} (Active Connections: ${torrent.activeConnections})`);
+    console.log(`[✓] Torrent Ready: ${torrent.name} (Connections: ${torrent.activeConnections})`);
 
-    // Find the largest file in the torrent (almost always the movie/video file)
+    // Find the largest video file
     const file = torrent.files.reduce((a, b) => (a.length > b.length ? a : b));
     console.log(`[▶] Streaming: ${file.name} (${(file.length / 1024 / 1024 / 1024).toFixed(2)} GB)`);
 
     let mimeType = 'video/mp4';
-    if (file.name.toLowerCase().endsWith('.mkv')) mimeType = 'video/x-matroska';
-    else if (file.name.toLowerCase().endsWith('.webm')) mimeType = 'video/webm';
-    else if (file.name.toLowerCase().endsWith('.avi')) mimeType = 'video/x-msvideo';
+    const ext = file.name.toLowerCase().split('.').pop();
+    if (ext === 'mkv') mimeType = 'video/x-matroska';
+    else if (ext === 'webm') mimeType = 'video/webm';
+    else if (ext === 'avi') mimeType = 'video/x-msvideo';
 
-    // Handle HTTP Range Requests (essential for seeking in video players)
     const range = req.headers.range;
+
     if (!range) {
-        // If the video player doesn't send a Range header, just send the whole file as a stream
         res.writeHead(200, {
             'Content-Length': file.length,
             'Content-Type': mimeType,
-            'Accept-Ranges': 'bytes'
+            'Accept-Ranges': 'bytes',
         });
         const stream = file.createReadStream();
-
-        stream.on('error', (err) => {
-            console.log(`[~] Stream Pipeline closed: ${err.message}`);
-        });
-
+        stream.on('error', () => { });
         stream.pipe(res);
         return;
     }
 
-    // Parse the range header (e.g., "bytes=32324-")
-    const positions = range.replace(/bytes=/, "").split("-");
+    const positions = range.replace(/bytes=/, '').split('-');
     const start = parseInt(positions[0], 10);
     const total = file.length;
     const end = positions[1] ? parseInt(positions[1], 10) : total - 1;
-    const chunksize = (end - start) + 1;
+    const chunksize = end - start + 1;
 
     res.writeHead(206, {
         'Content-Range': `bytes ${start}-${end}/${total}`,
         'Accept-Ranges': 'bytes',
         'Content-Length': chunksize,
-        'Content-Type': mimeType
+        'Content-Type': mimeType,
     });
 
     const stream = file.createReadStream({ start, end });
-
-    stream.on('error', (err) => {
-        // Swallowing "Writable stream closed prematurely" errors which happen 
-        // normally when a browser aborts a chunk request during scrubbing
-    });
-
-    res.on('error', (err) => {
-        // Ignore response socket errors
-    });
-
+    stream.on('error', () => { });
+    res.on('error', () => { });
     stream.pipe(res);
 
-    // Handle client disconnection
     req.on('close', () => {
-        console.log(`[x] Client disconnected from stream: ${file.name}`);
         stream.destroy();
         torrent.activeConnections--;
-
         if (torrent.activeConnections <= 0) {
-            console.log(`[!] No active streams for ${torrent.name}. Starting 5-minute cleanup timer...`);
+            console.log(`[!] No active streams for "${torrent.name}". Starting 5-min cleanup timer...`);
             torrent.idleTimeout = setTimeout(() => {
-                console.log(`[🗑️] Torrent idle for 5 minutes. Destroying to free space: ${torrent.name}`);
+                console.log(`[🗑] Destroying idle torrent: ${torrent.name}`);
                 torrent.destroy({ destroyStore: true }, () => {
-                    console.log(`[🗑️] Successfully deleted ${torrent.name} data from disk.`);
+                    console.log(`[🗑] Cleaned up: ${torrent.name}`);
                 });
                 activeTorrents.delete(magnetURI);
-            }, 5 * 60 * 1000); // 5 minutes
+            }, 5 * 60 * 1000);
         }
     });
 
     torrent.on('error', (err) => {
         console.error(`[!] Torrent error: ${err.message}`);
-        if (!res.headersSent) {
-            res.status(500).send(`Torrent Error: ${err.message}`);
-        }
+        if (!res.headersSent) res.status(500).send(`Torrent Error: ${err.message}`);
     });
 }
 
-// Endpoint to quickly check download status from the UI if desired
+// --- /status endpoint ---
 app.get('/status', (req, res) => {
-    let magnetURI = req.query.magnet;
+    const magnetURI = req.query.magnet;
     if (!magnetURI) return res.json({ error: 'Missing magnet' });
 
-    let torrent = client.get(magnetURI);
+    const torrent = client.get(magnetURI);
     if (!torrent) return res.json({ status: 'not_found' });
 
     res.json({
@@ -183,14 +205,52 @@ app.get('/status', (req, res) => {
         uploadSpeed: torrent.uploadSpeed,
         progress: torrent.progress,
         numPeers: torrent.numPeers,
-        timeRemaining: torrent.timeRemaining
+        timeRemaining: torrent.timeRemaining,
     });
 });
 
-const PORT = 6987; // Same port PlayTorrio used for familiarity!
+// --- /info endpoint - return file info without starting a stream (for Hub probe) ---
+app.get('/info', (req, res) => {
+    const magnetURI = req.query.magnet;
+    if (!magnetURI) return res.status(400).json({ error: 'Missing magnet' });
+
+    let torrent = activeTorrents.get(magnetURI);
+
+    const sendInfo = (t) => {
+        if (!t.files || t.files.length === 0) {
+            return res.status(500).json({ error: 'No files in torrent' });
+        }
+        const file = t.files.reduce((a, b) => (a.length > b.length ? a : b));
+        const ext = file.name.toLowerCase().split('.').pop();
+        res.json({
+            name: file.name,
+            size: file.length,
+            extension: ext,
+            streamUrl: `/stream?magnet=${encodeURIComponent(magnetURI)}`,
+        });
+    };
+
+    if (torrent) {
+        if (torrent.ready) sendInfo(torrent);
+        else torrent.once('ready', () => sendInfo(torrent));
+    } else {
+        // Add torrent to get metadata
+        console.log(`[i] Info request — adding torrent for metadata: ${magnetURI.substring(0, 60)}...`);
+        const dlPath = DEFAULT_DL_PATH || FALLBACK_DL_PATH || undefined;
+        const addOpts = dlPath ? { path: dlPath } : {};
+        client.add(magnetURI, addOpts, (newTorrent) => {
+            activeTorrents.set(magnetURI, newTorrent);
+            sendInfo(newTorrent);
+        });
+    }
+});
+
+const PORT = 6987;
 app.listen(PORT, () => {
     console.log('====================================================');
     console.log(`🚀 WebTorrent Streamer running on port ${PORT}`);
-    console.log(`📡 Ready to receive magnet links from the UI Hub`);
+    console.log(`📡 Primary path  : ${DEFAULT_DL_PATH || '(WebTorrent default)'}`);
+    console.log(`📦 Fallback path : ${FALLBACK_DL_PATH}`);
+    console.log(`📏 Large file threshold: ${LARGE_FILE_THRESHOLD_GB} GB`);
     console.log('====================================================');
 });
