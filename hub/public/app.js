@@ -387,7 +387,8 @@ async function startHLSStream(magnet, probe, video, overlay, statusText) {
             if (data.fatal) console.error('[hls.js] Fatal error:', data.type, data.details);
         });
 
-        // Seek handler: restart ffmpeg from seeked position then reload hls.js
+        // Seek handler: tell server to restart ffmpeg from new position.
+        // hls.js naturally retries the segment at video.currentTime via its retry logic.
         let seekDebounce = null;
         video.onseeking = () => {
             if (!activeSessionId) return;
@@ -402,14 +403,12 @@ async function startHLSStream(magnet, probe, video, overlay, statusText) {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ seekTime }),
                     });
-                    // Force hls.js to reload from the new position
-                    if (hlsInstance) {
-                        hlsInstance.stopLoad();
-                        hlsInstance.startLoad(seekTime);
-                    }
+                    // hls.js will naturally retry fetching the segment at currentTime
+                    // once the server restarts ffmpeg from the seeked position
                 } catch (e) { console.warn('[Player] Seek request failed:', e.message); }
             }, 400); // debounce 400ms to avoid rapid-fire seeks
         };
+
     } else {
         throw new Error('HLS not supported on this browser');
     }
