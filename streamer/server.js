@@ -1,4 +1,4 @@
-import express from 'express';
+﻿import express from 'express';
 import WebTorrent from 'webtorrent';
 import cors from 'cors';
 import fs from 'fs';
@@ -55,54 +55,85 @@ function pickDownloadPath(fileSizeBytes) {
 }
 
 // ─── Torrent State ─────────────────────────────────────────────────────────────
-// activeTorrents: magnetURI → torrent (ready or in-flight)
-const activeTorrents = new Map();
+// Key: infoHash (lower-case hex) — stable regardless of magnet URL encoding/ordering
+const activeTorrents = new Map(); // infoHash → torrent
+const pendingCallbacks = new Map(); // infoHash → [callbacks...]
 
-// pendingCallbacks: magnetURI → [callback,...] queued while client.add() is in-flight
-// The FIRST caller fires client.add(); subsequent callers are queued and called when ready.
-const pendingCallbacks = new Map();
+/** Extract the 40-char hex info-hash from any magnet URI. */
+function getInfoHash(magnetURI) {
+    try {
+        const m = magnetURI.match(/xt=urn:btih:([a-fA-F0-9]{40}|[A-Z2-7]{32})/i);
+        return m ? m[1].toLowerCase() : null;
+    } catch { return null; }
+}
 
 /**
- * Safe torrent getter — if the torrent is already known (active or pending), resolves
- * immediately or queues. Never calls client.add() more than once per magnetURI.
- * callback receives the ready torrent instance (or null on error).
+ * Safe torrent getter — deduplicates on infoHash so two requests for the same
+ * torrent with different magnet strings never both call client.add() (which
+ * causes "Cannot add duplicate torrent" and leaves callbacks hanging forever).
  */
 function getTorrent(magnetURI, callback) {
-    // Already fully ready
-    const existing = activeTorrents.get(magnetURI);
+    const key = getInfoHash(magnetURI) || magnetURI;
+
+    // ①  Check our ready-torrent cache
+    const existing = activeTorrents.get(key);
     if (existing) {
         if (existing.ready) return callback(existing);
         return existing.once('ready', () => callback(existing));
     }
 
-    // Someone else already called client.add() — queue behind them
-    if (pendingCallbacks.has(magnetURI)) {
-        pendingCallbacks.get(magnetURI).push(callback);
+    // ②  Secondary guard: ask WebTorrent directly (handles edge-cases where
+    //    our map missed an add, e.g. after a crash-recovery scenario)
+    const wtExisting = client.get(key);
+    if (wtExisting) {
+        activeTorrents.set(key, wtExisting);
+        if (wtExisting.ready) return callback(wtExisting);
+        return wtExisting.once('ready', () => callback(wtExisting));
+    }
+
+    // ③  Another concurrent request is already calling client.add() — queue
+    if (pendingCallbacks.has(key)) {
+        pendingCallbacks.get(key).push(callback);
         return;
     }
 
-    // First caller — initiate add
+    // ④  First caller — initiate add
     console.log(`[+] Adding torrent: ${magnetURI.substring(0, 60)}...`);
-    pendingCallbacks.set(magnetURI, [callback]);
+    pendingCallbacks.set(key, [callback]);
 
     const dlPath = DEFAULT_DL_PATH || FALLBACK_DL_PATH || undefined;
     const addOpts = dlPath ? { path: dlPath } : {};
 
-    client.add(magnetURI, addOpts, (torrent) => {
-        activeTorrents.set(magnetURI, torrent);
-        const pending = pendingCallbacks.get(magnetURI) || [];
-        pendingCallbacks.delete(magnetURI);
+    // Wrap in try-catch for synchronous errors from WebTorrent
+    try {
+        client.add(magnetURI, addOpts, (torrent) => {
+            activeTorrents.set(key, torrent);
+            const pending = pendingCallbacks.get(key) || [];
+            pendingCallbacks.delete(key);
 
-        if (!torrent.ready) {
-            // Wait for ready before firing callbacks
-            torrent.once('ready', () => {
+            if (!torrent.ready) {
+                torrent.once('ready', () => pending.forEach(cb => cb(torrent)));
+            } else {
                 pending.forEach(cb => cb(torrent));
-            });
+            }
+        });
+    } catch (err) {
+        // client.add threw synchronously (shouldn't happen, but be safe)
+        console.error(`[!] client.add threw synchronously: ${err.message}`);
+        // Try to recover via client.get
+        const t = client.get(key);
+        const pending = pendingCallbacks.get(key) || [];
+        pendingCallbacks.delete(key);
+        if (t) {
+            activeTorrents.set(key, t);
+            if (t.ready) pending.forEach(cb => cb(t));
+            else t.once('ready', () => pending.forEach(cb => cb(t)));
         } else {
-            pending.forEach(cb => cb(torrent));
+            pending.forEach(cb => cb(null));
         }
-    });
+    }
 }
+
 
 // ─── /stream endpoint ─────────────────────────────────────────────────────────
 app.get('/stream', (req, res) => {
@@ -180,13 +211,15 @@ function onConnectionClose(torrent, magnetURI) {
     torrent.activeConnections = Math.max(0, (torrent.activeConnections || 1) - 1);
     if (torrent.activeConnections <= 0) {
         console.log(`[!] No active streams for "${torrent.name}". Starting 5-min cleanup timer...`);
+        const key = getInfoHash(magnetURI) || magnetURI;
         torrent.idleTimeout = setTimeout(() => {
             console.log(`[🗑] Destroying idle torrent: ${torrent.name}`);
             torrent.destroy({ destroyStore: true }, () => { console.log(`[🗑] Cleaned: ${torrent.name}`); });
-            activeTorrents.delete(magnetURI);
+            activeTorrents.delete(key);
         }, 5 * 60 * 1000);
     }
 }
+
 
 // ─── /info endpoint ───────────────────────────────────────────────────────────
 app.get('/info', (req, res) => {
