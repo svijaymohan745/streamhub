@@ -87,9 +87,15 @@ function getTorrent(magnetURI, callback) {
     const wtExisting = client.get(key);
     if (wtExisting) {
         activeTorrents.set(key, wtExisting);
+        // client.get() may return a lightweight object without EventEmitter in some WTv versions
         if (wtExisting.ready) return callback(wtExisting);
-        return wtExisting.once('ready', () => callback(wtExisting));
+        if (typeof wtExisting.once === 'function') {
+            return wtExisting.once('ready', () => callback(wtExisting));
+        }
+        // Not ready but can't subscribe — treat as pending and let client.add() handle it
+        // (WebTorrent will deduplicate internally)
     }
+
 
     // ③  Another concurrent request is already calling client.add() — queue
     if (pendingCallbacks.has(key)) {
