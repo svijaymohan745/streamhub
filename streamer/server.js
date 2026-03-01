@@ -69,38 +69,34 @@ function getInfoHash(magnetURI) {
 
 /**
  * Safe torrent getter — deduplicates on infoHash so two requests for the same
- * torrent with different magnet strings never both call client.add() (which
- * causes "Cannot add duplicate torrent" and leaves callbacks hanging forever).
+ * torrent with different magnet strings never both call client.add().
+ * Also guards against WebTorrent returning plain objects without EventEmitter.
  */
 function getTorrent(magnetURI, callback) {
     const key = getInfoHash(magnetURI) || magnetURI;
 
-    // ①  Check our ready-torrent cache
+    // ①  Check our cache — only trust it if it has EventEmitter or is already ready
     const existing = activeTorrents.get(key);
     if (existing) {
         if (existing.ready) return callback(existing);
-        return existing.once('ready', () => callback(existing));
-    }
-
-    // ②  Secondary guard: ask WebTorrent directly (handles edge-cases where
-    //    our map missed an add, e.g. after a crash-recovery scenario)
-    const wtExisting = client.get(key);
-    if (wtExisting) {
-        activeTorrents.set(key, wtExisting);
-        // client.get() may return a lightweight object without EventEmitter in some WTv versions
-        if (wtExisting.ready) return callback(wtExisting);
-        if (typeof wtExisting.once === 'function') {
-            return wtExisting.once('ready', () => callback(wtExisting));
+        if (typeof existing.once === 'function') {
+            return existing.once('ready', () => callback(existing));
         }
-        // Not ready but can't subscribe — treat as pending and let client.add() handle it
-        // (WebTorrent will deduplicate internally)
+        // Stale/non-EventEmitter entry — clear it and fall through to re-add
+        activeTorrents.delete(key);
     }
 
-
-    // ③  Another concurrent request is already calling client.add() — queue
+    // ②  Another concurrent request is already calling client.add() — queue
     if (pendingCallbacks.has(key)) {
         pendingCallbacks.get(key).push(callback);
         return;
+    }
+
+    // ③  Ask WebTorrent directly — only use if already ready (plain objects can't subscribe)
+    const wtExisting = client.get(key);
+    if (wtExisting && wtExisting.ready) {
+        activeTorrents.set(key, wtExisting);
+        return callback(wtExisting);
     }
 
     // ④  First caller — initiate add
@@ -110,13 +106,12 @@ function getTorrent(magnetURI, callback) {
     const dlPath = DEFAULT_DL_PATH || FALLBACK_DL_PATH || undefined;
     const addOpts = dlPath ? { path: dlPath } : {};
 
-    // Wrap in try-catch for synchronous errors from WebTorrent
     try {
         client.add(magnetURI, addOpts, (torrent) => {
+            // The callback torrent IS a proper EventEmitter — safe to use .once
             activeTorrents.set(key, torrent);
             const pending = pendingCallbacks.get(key) || [];
             pendingCallbacks.delete(key);
-
             if (!torrent.ready) {
                 torrent.once('ready', () => pending.forEach(cb => cb(torrent)));
             } else {
@@ -124,19 +119,13 @@ function getTorrent(magnetURI, callback) {
             }
         });
     } catch (err) {
-        // client.add threw synchronously (shouldn't happen, but be safe)
-        console.error(`[!] client.add threw synchronously: ${err.message}`);
-        // Try to recover via client.get
-        const t = client.get(key);
+        console.error(`[!] client.add threw: ${err.message}`);
         const pending = pendingCallbacks.get(key) || [];
         pendingCallbacks.delete(key);
-        if (t) {
-            activeTorrents.set(key, t);
-            if (t.ready) pending.forEach(cb => cb(t));
-            else t.once('ready', () => pending.forEach(cb => cb(t)));
-        } else {
-            pending.forEach(cb => cb(null));
-        }
+        // Best-effort recovery: check if already in client
+        const t = client.get(key);
+        if (t && t.ready) { activeTorrents.set(key, t); pending.forEach(cb => cb(t)); }
+        else pending.forEach(cb => cb(null));
     }
 }
 
